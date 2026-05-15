@@ -8,7 +8,7 @@
 
 ## 1. 项目概述
 
-**项目名称**：`osdd`（Open Source Due Diligence）  
+**项目名称**：`osscout`（Open Source Due Diligence）  
 **定位**：面向技术团队的开源项目自动化尽调平台  
 **核心目标**：输入一个 GitHub 仓库地址，输出一份覆盖社区健康、代码质量、安全风险、技术演进四个维度的结构化尽调报告，并给出明确的推荐评级。
 
@@ -669,7 +669,7 @@ docker-compose -f docker-compose.yml up -d
 
 ```env
 # 数据库
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost/osdd
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/osscout
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
@@ -697,7 +697,7 @@ ANALYSIS_TIMEOUT=300
 ## 12. 项目目录结构
 
 ```
-osdd/
+osscout/
 ├── README.md
 ├── PROJECT_PLAN.md          # 本文档
 ├── docker-compose.yml

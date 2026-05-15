@@ -1,0 +1,73 @@
+# Docker Compose 开发环境配置
+# 一键启动：docker-compose -f docker-compose.dev.yml up
+# 一键停止：docker-compose -f docker-compose.dev.yml down
+
+services:
+  # FastAPI 后端服务
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载本地代码，实现热重载
+      - ./backend:/app
+    env_file:
+      # 从 .env 读取环境变量，与本地配置统一
+      - ./.env
+    depends_on:
+      - db
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery 异步任务 worker（Phase 2 启用，需先安装 celery[redis]）
+  # worker:
+  #   build: ./backend
+  #   volumes:
+  #     - ./backend:/app
+  #   env_file:
+  #     - ./.env
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   command: celery -A app.tasks worker --loglevel=info
+
+  # PostgreSQL 数据库
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      # 与 .env 中的 DATABASE_URL 保持一致
+      - POSTGRES_USER=osscout
+      - POSTGRES_PASSWORD=osscout
+      - POSTGRES_DB=osscout
+    volumes:
+      # 数据持久化到本地，容器删除数据不丢失
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # React 前端开发服务器
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      # node_modules 用容器内的，不挂载本地
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    command: sh -c "npm install && npm run dev -- --host"
+
+# 命名卷，用于数据持久化
+volumes:
+  postgres_data:
+  redis_data:
