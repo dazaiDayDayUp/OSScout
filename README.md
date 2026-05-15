@@ -1,4 +1,4 @@
-# osdd — 开源项目深度尽调 Agent
+# osscout — 开源项目深度尽调 Agent
 
 > 面向技术团队的开源项目自动化尽调平台
 
@@ -33,13 +33,13 @@ open http://localhost:8000/docs
 ```
 
 数据库连接（DataGrip / DBeaver）：
-- PostgreSQL：`localhost:5432`，用户名 `osdd`，密码 `osdd`
+- PostgreSQL：`localhost:5432`，用户名 `osscout`，密码 `osscout`
 - Redis：`localhost:6379`，无密码
 
 ## 项目结构
 
 ```
-osdd/
+osscout/
 ├── backend/              # FastAPI 后端
 │   ├── app/
 │   │   ├── api/v1/       # REST 接口

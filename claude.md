@@ -4,7 +4,7 @@
 
 用户是一名学生，正在准备 **Agent 开发实习工程师** 岗位，计划做一个项目写在简历上。项目的初步规划已经写在主目录下的 `PROJECT_PLAN.md` 中。
 
-**项目名称**：`osdd`（Open Source Due Diligence）
+**项目名称**：`osscout`（Open Source Due Diligence）
 **定位**：面向技术团队的开源项目自动化尽调平台
 **核心目标**：输入一个 GitHub 仓库地址，输出一份覆盖社区健康、代码质量、安全风险、技术演进四个维度的结构化尽调报告。
 
