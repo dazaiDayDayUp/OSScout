@@ -5,7 +5,7 @@
 
 ---
 
-## 当前状态：Phase 0 完成 + 已端到端验证，即将进入 Phase 1
+## 当前状态：Phase 1.1 完成，即将进入 Phase 1.2
 
 **最近更新**：2026-05-16
 
@@ -61,51 +61,77 @@ open http://localhost:8000/docs
 
 ---
 
-## Phase 1：MVP — 单项目 CLI 分析（待开始）
+## Phase 1：MVP — 单项目 CLI 分析
 
-**目标**：CLI 跑通"输入 repo URL → 输出文本报告"端到端流程。
+### Phase 1.1：社区健康 Agent + 端到端打通（已完成 ✅）
 
-### 起步策略：先用 service 跑通，再回头抽 MCP（混合方案）
+**决策回顾**：起步策略为"混合方案"——先用已有 `github_service` 直接调用跑通端到端，后续再抽 MCP。
 
-完整决策记录见对话上下文。简单说：
+#### 已完成的 5 个文件
 
-- ❌ **不**严格按 `PROJECT_PLAN.md` 第一项先做 `github-mcp`（先学协议成本高，第一份报告会推迟一周）
-- ❌ **不**完全跳过 MCP（这是简历核心卖点之一，最后必须有）
-- ✅ **先**用 Phase 0 已经写好的 `github_service` 直接调用，把 4 个 Agent + Orchestrator + CLI 跑通，看到第一份报告
-- ✅ **后**在 Phase 1.2 把 GitHub 数据采集抽成独立的 `github-mcp` server，Agent 改用 MCP 客户端调用
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `backend/app/scoring/community.py` | 社区健康度五项指标评分规则 | 228 |
+| `backend/app/agents/community_agent.py` | Agent 主体：采集 → 评分 → 结构化输出 | 123 |
+| `backend/app/agents/orchestrator.py` | 串行协调器（调度 community_agent） | 68 |
+| `backend/app/agents/reporter.py` | 文本报告格式化（Markdown 风格） | 112 |
+| `backend/app/cli.py` | CLI 入口：`python -m app.cli analyze <url>` | 56 |
 
-### Phase 1 任务拆解（按子阶段执行）
+#### 执行链路（6 层）
 
-#### Phase 1.1：社区健康度 Agent + 端到端打通（下一步）
+```
+repo_url 字符串
+    ↓ cli.py 解析参数
+    ↓ orchestrator.py 调度
+    ↓ community_agent.py 解析 URL + 采集数据
+    ↓ github_service.py 并发调用 6 个 GitHub API
+    ↓ scoring/community.py 计算 5 项指标
+    ↓ reporter.py 格式化为文本
+    ↓ cli.py print 输出
+```
 
-- [ ] `backend/app/scoring/community.py` — 社区健康度评分规则（PROJECT_PLAN §7.3 五项指标：Bus Factor / Issue 响应 / PR 合并率 / 活跃贡献者 / Release 稳定性）
-- [ ] `backend/app/agents/community_agent.py` — Agent 主体：采集数据 → 调评分 → 输出 finding
-- [ ] `backend/app/agents/orchestrator.py` — 协调器：串行版本（先简单，Phase 1.4 升级并发）
-- [ ] `backend/app/agents/reporter.py` — 文本报告格式化
-- [ ] `backend/app/cli.py` — CLI 入口：`python -m app.cli analyze <repo_url>`
+#### 端到端验证结果（python-poetry/poetry）
 
-**验收**：`docker-compose -f docker-compose.dev.yml exec api python -m app.cli analyze https://github.com/python-poetry/poetry` 能输出含社区健康度评分的文本报告。
+```bash
+$ python -m app.cli analyze https://github.com/python-poetry/poetry
+总分 18/30 [############--------] 60.0%
+```
 
-#### Phase 1.2：抽出 github-mcp server，Agent 改用 MCP 调用
+| 指标 | 得分 | 原始值 | 说明 |
+|------|------|--------|------|
+| Bus Factor | 0/10 | 2 | 仅 2 人覆盖 50% 贡献，高风险 |
+| Issue 响应速度 | 8/8 | 0.6 天 | 处理极快 |
+| PR 合并率 | 4/6 | 66.0% | 良好 |
+| 活跃贡献者 | 4/4 | 100 人 | 社区生态健康 |
+| Release 稳定性 | 2/2 | 0.2 个月前 | 维护活跃 |
+
+**结论**：链路完整跑通，评分逻辑与 PROJECT_PLAN §7.3 一致。
+
+#### Phase 1.1 剩余问题
+
+- Windows 控制台 GBK 编码导致中文输出乱码（代码本身无问题，终端编码设置问题）
+- Reporter 进度条字符已改用 `#` `-` 兼容 GBK
+
+### Phase 1.2：抽出 github-mcp server（待开始）
 
 - [ ] 引入 `mcp` Python SDK 依赖
 - [ ] `mcp-servers/github-mcp/server.py` — 独立的 MCP server 进程
 - [ ] `backend/app/mcp/client.py` — MCP Client 封装
 - [ ] 改造 `community_agent` 通过 MCP 调用而非直接调 service
 
-#### Phase 1.3：代码质量 Agent
+### Phase 1.3：代码质量 Agent（待开始）
 
 - [ ] `filesystem-mcp` server（仓库克隆 + 文件操作）
 - [ ] `code-analysis-mcp` server（Semgrep + radon）
 - [ ] `backend/app/scoring/quality.py` + `quality_agent.py`
 
-#### Phase 1.4：安全分析 Agent
+### Phase 1.4：安全分析 Agent（待开始）
 
 - [ ] `osv-mcp` server（漏洞库查询）
 - [ ] `backend/app/scoring/security.py` + `security_agent.py`
 - [ ] 许可证风险检查
 
-#### Phase 1.5：Orchestrator 升级 + 报告完善
+### Phase 1.5：Orchestrator 升级 + 报告完善（待开始）
 
 - [ ] Orchestrator 升级为并发版本（`asyncio.gather` 三个 Agent）
 - [ ] 加入综合评级（A+/A/B+/B/C/D）
@@ -115,12 +141,9 @@ open http://localhost:8000/docs
 
 ## 下一个具体动作
 
-**写 `backend/app/scoring/community.py`** —— PROJECT_PLAN §7.3 五项指标的纯规则评分函数。
+**Phase 1.2：把 GitHub 数据采集抽成独立的 `github-mcp` server**
 
-为什么从这里起步：
-1. 没有任何外部依赖（只接收已经采集好的 GitHub 数据字典）
-2. 是 4 个 Agent 共用的模式样板，写好这个第二个、第三个就容易了
-3. 一个文件完整闭环，符合"分步推进、紧凑汇报"原则
+需要向用户解释 MCP 是什么、为什么需要它、在本项目中的作用，再开始写代码。
 
 ---
 
