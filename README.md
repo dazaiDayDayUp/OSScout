@@ -20,36 +20,49 @@
 
 **Phase 1.3 已完成**：代码质量 Agent，新增 filesystem-mcp + code-analysis-mcp。
 
+**Phase 1.4 已完成**：安全分析 Agent，新建 `osv-mcp` Server（安全数据采集中心），覆盖 OSV 漏洞查询 + 许可证风险评估。
+
 ```bash
 # 分析指定仓库，输出文本报告
 python -m app.cli analyze https://github.com/psf/requests
 
-# 输出示例（两个维度）
-总分 36/55 [#############-------] 65.5%
+# 输出示例（三个维度，80/100 分）
+总分 33/80 [########------------] 41.2%
 
-[community]  22/30 (73.3%)
-  Bus Factor: 6/10 (3)          -- 3 人覆盖 50% 贡献
-  Issue 响应: 8/8 (0.1 天)       -- 处理极快
-  PR 合并率: 2/6 (34%)           -- 偏低
+[community]  14/30 (46.7%)
+  Bus Factor: 0/10 (2)          -- 2 人覆盖 50% 贡献，集中风险高
+  Issue 响应: 8/8 (0.0 天)       -- 处理极快
+  PR 合并率: 0/6 (21%)           -- 偏低
   活跃贡献者: 4/4 (100 人)        -- 社区健康
-  Release: 2/2 (0.0 个月前)      -- 维护活跃
+  Release: 2/2 (0.8 个月前)      -- 维护活跃
 
 [quality]    14/25 (56.0%)
   测试覆盖率: 6/8  (有 tests + CI)
-  静态分析漏洞: 7/7 (0 高危)
+  静态分析漏洞: 0/7 (3 高危)       -- 需修复
   文档完整度: 3/5  (2/4 项)
-  代码复杂度: 5/5  (平均 2.84，优秀)
+  代码复杂度: 5/5  (平均 3.21，优秀)
+
+[security]    5/25 (20.0%)
+  CVE 记录: 0/10 (46高危, 2中危, 19低危)  -- 历史漏洞较多
+  依赖漏洞: 0/8  (122 个依赖漏洞)
+  许可证风险: 5/5 (BSD-3-Clause，商业安全)
+  安全响应速度: 0/2 (平均 1873 天)
 ```
 
 ### 已验证的功能
 
 - FastAPI 后端服务正常运行（`http://localhost:8000/health`）
 - PostgreSQL 数据库 4 张核心表已创建（Repository / AnalysisTask / DueDiligenceReport / MetricHistory）
-- Redis 缓存服务正常运行，冷热请求差距 40 倍+
-- **MCP 协议链路**：github-mcp + filesystem-mcp + code-analysis-mcp 全部打通
-- 社区健康度评分引擎（5 项指标规则评分）
+- Redis 缓存服务已就绪（容错降级，Server 未启动时自动跳过）
+- **MCP 协议链路**：4 个 Server 全部打通
+  - github-mcp：GitHub 元数据查询
+  - filesystem-mcp：仓库克隆 + 文件操作
+  - code-analysis-mcp：radon 圈复杂度 + AST 安全扫描
+  - osv-mcp：SBOM 依赖提取 + OSV 漏洞查询 + 许可证检查
+- 社区健康度评分引擎（5 项指标：Bus Factor / Issue 响应 / PR 合并率 / 活跃贡献者 / Release）
 - 代码质量评分引擎（4 项指标：测试覆盖 / 静态分析 / 文档 / 复杂度）
-- CLI 入口：`python -m app.cli analyze <repo_url>`（输出双维度报告）
+- **安全评分引擎（4 项指标：CVE 记录 / 依赖漏洞 / 许可证风险 / 响应速度）**
+- CLI 入口：`python -m app.cli analyze <repo_url>`（输出三维度报告）
 - 结构化日志 + 全局异常处理已接入
 - Docker Compose 一键启动开发环境
 
@@ -89,7 +102,7 @@ docker-compose -f docker-compose.dev.yml exec api python -m app.cli analyze http
 
 ### 3. 数据库连接（DataGrip / DBeaver）
 
-- PostgreSQL：`localhost:5432`，用户名 `osscout`，密码 `osscout`
+- PostgreSQL：`localhost:5432`，用户名 `osscout`，密码 `ossscout`
 - Redis：`localhost:6379`，无密码
 
 ## 项目结构
@@ -98,7 +111,6 @@ docker-compose -f docker-compose.dev.yml exec api python -m app.cli analyze http
 osscout/
 ├── README.md
 ├── PROJECT_PLAN.md           # 完整项目规划
-├── PROGRESS.md               # 开发进度记录
 ├── CLAUDE.md                 # 协作规范
 ├── docker-compose.dev.yml    # 开发环境编排
 │
@@ -112,21 +124,24 @@ osscout/
 │   │   ├── core/             # 基础设施
 │   │   │   ├── models.py     # 数据库模型
 │   │   │   ├── database.py   # 异步数据库引擎
-│   │   │   ├── cache.py      # Redis 缓存
+│   │   │   ├── cache.py      # Redis 缓存（含降级容错）
 │   │   │   └── logger.py     # 结构化日志
 │   │   ├── agents/           # Agent 层
-│   │   │   ├── orchestrator.py   # 协调器（串行调度 community + quality）
+│   │   │   ├── orchestrator.py   # 协调器（串行调度 3 个 Agent）
 │   │   │   ├── community_agent.py
-│   │   │   ├── quality_agent.py  # 代码质量 Agent（Phase 1.3）
-│   │   │   └── reporter.py       # 报告格式化
+│   │   │   ├── quality_agent.py
+│   │   │   ├── security_agent.py   # 安全分析 Agent（Phase 1.4）
+│   │   │   └── reporter.py         # 报告格式化
 │   │   ├── scoring/          # 评分体系
-│   │   │   ├── community.py      # 社区健康度评分
-│   │   │   └── quality.py        # 代码质量评分（Phase 1.3）
+│   │   │   ├── community.py      # 社区健康度评分（0-30）
+│   │   │   ├── quality.py        # 代码质量评分（0-25）
+│   │   │   └── security.py       # 安全评分（0-25，Phase 1.4）
 │   │   ├── services/         # 业务逻辑
-│   │   │   ├── github_service_legacy.py  # 旧版直接调用（保留调试）
-│   │   │   └── mcp_github_service.py     # MCP 版本（Phase 1.2）
-│   │   ├── mcp/              # MCP 客户端（Phase 1.2+）
-│   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis Client
+│   │   │   ├── github_service_legacy.py
+│   │   │   ├── mcp_github_service.py
+│   │   │   └── security_service.py   # MCP 模式安全数据采集（Phase 1.4）
+│   │   ├── mcp/              # MCP 客户端
+│   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis / OSV Client
 │   │   ├── rag/              # RAG 模块（Phase 3）
 │   │   └── tasks/            # Celery 任务（Phase 2）
 │   ├── tests/
@@ -134,10 +149,11 @@ osscout/
 │
 ├── frontend/                 # React 前端（Phase 2）
 │   └── src/{components,pages,api,types}
-├── mcp-servers/              # MCP Server 独立包（Phase 1.2+）
-│   ├── github-mcp/           # GitHub API 查询
-│   ├── filesystem-mcp/       # 仓库克隆 + 文件操作（Phase 1.3）
-│   └── code-analysis-mcp/    # 代码静态分析（Phase 1.3）
+├── mcp-servers/              # MCP Server 独立包
+│   ├── github-mcp/           # GitHub 元数据查询
+│   ├── filesystem-mcp/       # 仓库克隆 + 文件操作
+│   ├── code-analysis-mcp/    # 代码静态分析（radon + AST）
+│   └── osv-mcp/              # 安全数据采集中心（SBOM + OSV + license，Phase 1.4）
 ├── tmp/                      # 临时目录（MCP Server 克隆的仓库，gitignored）
 ├── knowledge-base/           # RAG 知识库文档（Phase 3）
 ├── scripts/                  # 工具脚本
@@ -152,8 +168,8 @@ osscout/
 | Phase 1.1 | 社区健康 Agent + CLI 端到端打通 | 已完成 |
 | Phase 1.2 | 抽出 github-mcp server | 已完成 |
 | Phase 1.3 | 代码质量 Agent | 已完成 |
-| Phase 1.4 | 安全分析 Agent | 待开始 |
-| Phase 1.5 | Orchestrator 并发 + 综合评级 | 待开始 |
+| **Phase 1.4** | **安全分析 Agent（osv-mcp + 漏洞 + 许可证）** | **已完成** |
+| Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度 | 待开始 |
 | Phase 2 | Web 平台 + 异步任务 + React 前端 | 待开始 |
 | Phase 3 | Agent 智能化 + RAG | 待开始 |
 | Phase 4 | 持续监控 + 预警 | 待开始 |

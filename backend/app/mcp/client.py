@@ -125,3 +125,8 @@ class FilesystemMCPClient(_BaseMCPClient):
 class CodeAnalysisMCPClient(_BaseMCPClient):
     """Code Analysis MCP Server 客户端"""
     SERVER_MODULE = "code-analysis-mcp"
+
+
+class OSVMCPClient(_BaseMCPClient):
+    """OSV MCP Server 客户端（安全数据采集中心）"""
+    SERVER_MODULE = "osv-mcp"

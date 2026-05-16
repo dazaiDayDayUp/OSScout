@@ -78,6 +78,12 @@ class Reporter:
             lines.append(self._render_dimension(quality))
             lines.append("")
 
+        # 安全分析
+        security = result.dimensions.get("security", {})
+        if security:
+            lines.append(self._render_dimension(security))
+            lines.append("")
+
         # 关键发现
         if result.findings:
             lines.append("-" * 60)
@@ -140,6 +146,10 @@ class Reporter:
                 "static_analysis": "静态分析漏洞",
                 "documentation": "文档完整度",
                 "code_complexity": "代码复杂度",
+                "cve_record": "CVE 记录",
+                "dependency_vulns": "依赖漏洞",
+                "license_risk": "许可证风险",
+                "response_speed": "安全响应速度",
             }
             name = name_map.get(key, key)
             score = item.get("score", 0)

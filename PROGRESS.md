@@ -5,7 +5,7 @@
 
 ---
 
-## 当前状态：Phase 1.3 完成，即将进入 Phase 1.4
+## 当前状态：Phase 1.4 完成，即将进入 Phase 1.5
 
 **最近更新**：2026-05-16
 
@@ -22,7 +22,7 @@
 | `backend/app/main.py` | FastAPI 入口 + 健康检查 + 日志 + 异常处理 + 路由注册 |
 | `backend/app/core/models.py` | 4 张数据库表模型（Repository / AnalysisTask / DueDiligenceReport / MetricHistory） |
 | `backend/app/core/database.py` | 异步数据库引擎 + 会话管理 |
-| `backend/app/core/cache.py` | Redis 缓存封装（get/set/delete + 默认 24h TTL） |
+| `backend/app/core/cache.py` | Redis 缓存封装（get/set/delete + 默认 24h TTL + **降级容错**） |
 | `backend/app/core/logger.py` | structlog 结构化日志配置 |
 | `backend/app/services/github_service.py` | GitHub API 封装（缓存 + 并发控制） |
 | `backend/app/api/v1/debug.py` | **临时调试接口**（Phase 0 验证用，Phase 1 进入正式开发后可考虑移除） |
@@ -194,19 +194,80 @@ $ python -m app.cli analyze https://github.com/psf/requests
 | radon `-a` 抑制 JSON | Windows 上 radon `-a` 参数不兼容 JSON 输出 | 去掉 `-a`，自己计算平均值 |
 | semgrep subprocess 死锁 | Windows 上 MCP stdio + subprocess 冲突 | 改用 Python AST 自研扫描（简化版） |
 
-### Phase 1.4：安全分析 Agent（待开始）
+### Phase 1.4：安全分析 Agent（已完成 ✅）
 
-- [ ] `osv-mcp` server（漏洞库查询）
-- [ ] `backend/app/scoring/security.py` + `security_agent.py`
-- [ ] 许可证风险检查
+**决策回顾**：
+- 原本计划把 SBOM / OSV 分散在 github-mcp 和 osv-mcp，但用户提出 Security Agent 应该只依赖一个 Server
+- 最终方案：**osv-mcp 成为"安全数据采集中心"**，内部同时调用 GitHub SBOM API + OSV API + GitHub License API，Security Agent 只需启动一个 OSVMCPClient
+- 直接 HTTP 调用重构为 MCP 模式：security_service.py 从 ~500 行直接 HTTP 逻辑简化为 ~40 行 MCP Client 调用，HTTP 逻辑全部下沉到 osv-mcp Server
 
-### Phase 1.5：Orchestrator 升级 + 报告完善（待开始）
+#### 新增文件
 
-- [ ] Orchestrator 升级为并发版本（`asyncio.gather` 三个 Agent）
-- [ ] 加入综合评级（A+/A/B+/B/C/D）
-- [ ] 5 个热门项目的基准测试（next.js / poetry / fastapi / react / vue）
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `mcp-servers/osv-mcp/server.py` | MCP Server：SBOM 提取 + OSV 漏洞查询 + 许可证获取 | 350 |
+| `mcp-servers/osv-mcp/pyproject.toml` | 独立包配置 | 18 |
+| `mcp-servers/osv-mcp/__init__.py` | 包标记 | 1 |
+| `backend/app/scoring/security.py` | 安全评分引擎（CVE 记录 / 依赖漏洞 / 许可证 / 响应速度） | 285 |
+| `backend/app/agents/security_agent.py` | Agent 主体：采集 → 评分 → 输出 | 115 |
+| `backend/app/services/security_service.py` | MCP 模式安全数据采集（通过 OSVMCPClient） | 40 |
+| `backend/app/mcp/client.py` | 新增 OSVMCPClient | +3 行 |
+| `backend/app/agents/orchestrator.py` | 新增 security_agent 调度，总分 55→80 | 改 |
+| `backend/app/agents/reporter.py` | 新增 security 维度显示 | 改 |
 
----
+#### 端到端验证结果（pallets/click）
+
+```bash
+$ python -m app.cli analyze https://github.com/pallets/click
+总分 33/80 [########------------] 41.2%
+
+[community]  14/30 (46.7%)
+  Bus Factor: 0/10 (2)
+  Issue 响应: 8/8 (0.0 天)
+  PR 合并率: 0/6 (21.0%)
+  活跃贡献者: 4/4 (100 人)
+  Release: 2/2 (0.8 个月前)
+
+[quality]    14/25 (56.0%)
+  测试覆盖率: 6/8
+  静态分析漏洞: 0/7 (3 高危)
+  文档完整度: 3/5
+  代码复杂度: 5/5 (3.21)
+
+[security]    5/25 (20.0%)
+  CVE 记录: 0/10 (46高危, 2中危, 19低危)
+  依赖漏洞: 0/8 (122 个)
+  许可证风险: 5/5 (BSD-3-Clause)
+  安全响应速度: 0/2 (平均 1873 天)
+```
+
+#### 遇到的坑与解决
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| OSV 400 Bad Request | SBOM 返回了 `githubactions` 生态系统，OSV 不认识 | 添加 `_OSV_SUPPORTED_ECOSYSTEMS` 白名单过滤 |
+| 漏洞 severity 全为 UNKNOWN | OSV `querybatch` 只返回 `id` + `modified`，severity 在详情端点 | 两阶段查询：querybatch → 并行 `GET /v1/vulns/{id}` |
+| 输入验证错误 | `version` 字段为 `None`，JSON Schema 要求 `string` | Schema 改为 `{"type": ["string", "null"]}` |
+| osv-mcp 缺少 pyproject.toml | 只有 server.py，和其他 Server 目录结构不一致 | 补全 `pyproject.toml` + `__init__.py` |
+
+#### MCP 架构统一
+
+4 个 Server 目录结构完全一致，职责单一：
+
+| Server | 职责 | 使用方 |
+|--------|------|--------|
+| github-mcp | GitHub 元数据 | Community Agent |
+| filesystem-mcp | 文件系统操作 | Quality Agent |
+| code-analysis-mcp | 静态分析 | Quality Agent |
+| osv-mcp | 安全数据采集 | Security Agent |
+
+### Phase 1.5：技术演进 Agent + Orchestrator 并发调度（待开始）
+
+- [ ] `backend/app/scoring/evolution.py` — 技术演进评分引擎（0-20 分）
+- [ ] `backend/app/agents/evolution_agent.py` — 技术演进 Agent
+- [ ] Orchestrator 升级为 `asyncio.gather` 并发调度 4 个 Agent
+- [ ] 加入综合评级计算（A+/A/B+/B/C/D）
+- [ ] 总分覆盖 100/100 分
 
 ---
 
@@ -240,27 +301,32 @@ docker-compose -f docker-compose.dev.yml build api
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
-### Phase 1.3 需要的新依赖
+### Phase 1.4 需要的新依赖
 
 ```bash
 # 宿主机安装（开发用）
-pip install semgrep radon
+# osv-mcp 依赖同 github-mcp：mcp + httpx，已安装
 
-# 已追加到 requirements.txt
-semgrep>=1.100.0
-radon>=6.0.0
+# 已确保 requirements.txt 包含：
+mcp>=1.0.0
+httpx>=0.27.0
 ```
 
 ---
 
 ## 下一个具体动作
 
-**Phase 1.4：安全分析 Agent**
+**Phase 1.5：技术演进 Agent + Orchestrator 并发调度**
 
-1. `osv-mcp` server（开源漏洞数据库 OSV 查询）
-2. `backend/app/scoring/security.py` + `security_agent.py`
-3. 许可证风险检查（MIT/Apache/GPL 识别）
-4. 更新 Orchestrator，串行调度 security_agent（三个 Agent）
+1. `backend/app/scoring/evolution.py` — 技术演进评分引擎（0-20 分）
+   - 发布频率评分
+   - 技术栈更新评分
+   - Breaking Change 评分
+   - 竞品对比评分（简化版）
+2. `backend/app/agents/evolution_agent.py` — 技术演进 Agent
+3. Orchestrator 串行改并行：`asyncio.gather(community, quality, security, evolution)`
+4. 综合评级算法：总分 → A+/A/B+/B/C/D
+5. 4 个热门项目基准测试
 
 ---
 

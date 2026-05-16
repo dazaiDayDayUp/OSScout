@@ -58,3 +58,6 @@ tmp/
 # === 日志 ===
 *.log
 logs/
+
+# === claude ===
+.claude/
