@@ -3,12 +3,13 @@ GitHub API 封装服务
 提供仓库元数据的异步获取，包含缓存和并发控制
 """
 import asyncio
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
 
 from app.config import settings
-from app.core.cache import get_cache, set_cache
+from app.core.cache import delete_cache, get_cache, set_cache
 
 # GitHub API 基础地址
 GITHUB_API_BASE = "https://api.github.com"
@@ -92,8 +93,28 @@ async def list_releases(owner: str, repo: str) -> list[dict]:
 
 
 async def get_commit_activity(owner: str, repo: str) -> list[dict]:
-    """获取仓库最近一年的每周提交活动统计"""
-    return await _github_get(f"/repos/{owner}/{repo}/stats/commit_activity")
+    """
+    获取仓库最近一年的每周提交活动统计
+    使用 participation 端点替代 commit_activity，避免 GitHub 后台异步计算导致的 202 空数据问题
+    participation 返回的数据结构与 commit_activity 一致，可直接用于活跃度趋势分析
+    """
+    data = await _github_get(f"/repos/{owner}/{repo}/stats/participation")
+
+    # participation 返回 {"all": [...], "owner": [...]}，提取每周提交总数
+    weekly_totals = data.get("all", []) if isinstance(data, dict) else []
+    if not weekly_totals:
+        return []
+
+    # 构建与 commit_activity 兼容的格式：最近 52 周的每周统计
+    now = datetime.utcnow()
+    monday = now - timedelta(days=now.weekday())
+
+    result = []
+    for i, total in enumerate(reversed(weekly_totals)):
+        week_ts = int((monday - timedelta(weeks=i)).timestamp())
+        result.append({"week": week_ts, "total": total})
+
+    return result
 
 
 async def collect_all_metadata(owner: str, repo: str) -> dict[str, Any]:

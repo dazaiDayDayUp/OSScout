@@ -45,8 +45,8 @@
 | `/all` 热请求耗时 | ~70ms | Redis 缓存命中，差距 40 倍+ |
 | 单接口冷/热对比 | 显著差距 | 缓存层全链路打通 |
 
-**潜在小坑（已知，先记一笔不改）**：
-- GitHub `/stats/commit_activity` 首次请求可能返回 HTTP 202 + 空数组（GitHub 后台异步生成统计），第二次再调才有数据。Phase 1 写 Agent 时如发现影响评分再加重试。
+**已知问题与解决**：
+- ~~GitHub `/stats/commit_activity` 首次请求可能返回 HTTP 202 + 空数组~~ → **已修复**：改用 `/stats/participation` 端点获取提交活动数据，避免后台异步计算导致的空数据问题。`participation` 端点直接返回即时计算结果（含 52 周每周提交总数），与 `commit_activity` 的 `total` 字段等效。
 - Swagger UI 渲染大 JSON 会卡死浏览器，`/all` 接口已改为返回摘要而非完整数据。
 
 ### 启动命令

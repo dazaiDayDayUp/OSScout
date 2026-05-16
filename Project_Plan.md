@@ -295,7 +295,7 @@ class DueDiligenceOrchestrator:
 - list_issues(owner: string, repo: string, state: string, since: string) -> Issue[]
 - list_pull_requests(owner: string, repo: string, state: string) -> PR[]
 - list_releases(owner: string, repo: string) -> Release[]
-- get_commit_activity(owner: string, repo: string) -> WeeklyCommitActivity[]
+- get_commit_activity(owner: string, repo: string) -> WeeklyCommitActivity[]  // 实际调用 /stats/participation 端点，避免 /stats/commit_activity 的 202 异步计算问题
 ```
 
 ### 5.3 GitHub API 限频策略
