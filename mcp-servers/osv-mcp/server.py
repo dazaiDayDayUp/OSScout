@@ -67,7 +67,7 @@ async def _github_get(path: str, extra_headers: dict | None = None) -> dict | li
     """发送 GitHub API GET 请求"""
     headers = {**_GITHUB_HEADERS, **(extra_headers or {})}
     async with _github_semaphore:
-        async with httpx.AsyncClient(headers=headers, timeout=30) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=30, follow_redirects=True) as client:
             url = f"{GITHUB_API_BASE}{path}"
             response = await client.get(url)
             if response.status_code == 404:

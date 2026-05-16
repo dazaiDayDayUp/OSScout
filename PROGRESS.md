@@ -5,7 +5,7 @@
 
 ---
 
-## 当前状态：Phase 1.4 完成，即将进入 Phase 1.5
+## 当前状态：Phase 1.5 完成，即将进入 Phase 2
 
 **最近更新**：2026-05-16
 
@@ -61,7 +61,7 @@ open http://localhost:8000/docs
 
 ---
 
-## Phase 1：MVP — 单项目 CLI 分析
+## Phase 1：MVP — 单项目 CLI 分析（已完成 ✅）
 
 ### Phase 1.1：社区健康 Agent + 端到端打通（已完成 ✅）
 
@@ -250,24 +250,124 @@ $ python -m app.cli analyze https://github.com/pallets/click
 | 输入验证错误 | `version` 字段为 `None`，JSON Schema 要求 `string` | Schema 改为 `{"type": ["string", "null"]}` |
 | osv-mcp 缺少 pyproject.toml | 只有 server.py，和其他 Server 目录结构不一致 | 补全 `pyproject.toml` + `__init__.py` |
 
-#### MCP 架构统一
+### Phase 1.5：技术演进 Agent + Orchestrator 并发调度（已完成 ✅）
 
-4 个 Server 目录结构完全一致，职责单一：
+**决策回顾**：
+- **不需要为技术演进新建 MCP Server**。现有 4 个 Server 的分工是按「通用工具能力」而非「Agent 业务域」划分。Community/Quality/Security Agent 也都没有专属 Server。
+- 技术演进 Agent 的 80% 数据（releases + SBOM）复用现有 `github-mcp` 和 `osv-mcp` 的 tool。仅「查询 PyPI/npm 最新版本」内联 `httpx` 调用，Phase 2 再考虑是否 MCP 化。
+- 竞品对比 4 分 Phase 1 跳过，固定计 0 分。待 Phase 2 `search-mcp` 接入后再实现。
+- **并发调度**：Orchestrator 从串行改为 `asyncio.gather` 并行调度 4 个 Agent，`return_exceptions=True` 实现错误隔离——单个 Agent 失败输出降级结果，不影响其他维度。
+
+#### 新增文件
+
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `backend/app/services/evolution_service.py` | 技术演进数据采集：releases + SBOM + PyPI/npm 最新版本 + Breaking Change 检测 | 240 |
+| `backend/app/scoring/evolution.py` | 技术演进评分引擎（发布频率 / 技术栈更新 / Breaking Change / 竞品对比占位） | 270 |
+| `backend/app/agents/evolution_agent.py` | Agent 主体：采集 → 评分 → 输出 | 82 |
+
+#### 修改文件
+
+| 文件 | 修改内容 |
+|------|----------|
+| `backend/app/agents/orchestrator.py` | 串行 → `asyncio.gather` 并发调度 4 个 Agent + 错误隔离降级 |
+| `backend/app/agents/reporter.py` | 新增 evolution 维度显示（4 项指标名映射） |
+
+#### 端到端验证结果（python-poetry/poetry）
+
+```bash
+$ python -m app.cli analyze https://github.com/python-poetry/poetry
+总分 58/100 [#############-------] 58.0%
+
+[community]  18/30 (60.0%)
+  Bus Factor: 0/10 (2)
+  Issue 响应: 8/8 (0.5 天)
+  PR 合并率: 4/6 (65%)
+  活跃贡献者: 4/4 (100 人)
+  Release: 2/2 (0.2 个月前)
+
+[quality]    21/25 (84.0%)
+  测试覆盖率: 6/8
+  静态分析漏洞: 7/7 (0 高危)
+  文档完整度: 3/5
+  代码复杂度: 5/5 (平均 4.12)
+
+[security]    5/25 (20.0%)
+  CVE 记录: 0/10 (6高危, 3中危, 2低危)
+  依赖漏洞: 0/8 (17 个)
+  许可证风险: 5/5 (MIT)
+  安全响应速度: 0/2 (1666 天)
+
+[evolution]  14/20 (70.0%)
+  发布频率: 4/6 (10次/年)
+  技术栈更新: 6/6 (所有依赖均为最新)
+  Breaking Change: 4/4 (4次 major bump，均有文档)
+  竞品对比: 0/4 (Phase 2 接入)
+```
+
+#### 基准测试脚本
+
+新增 `scripts/benchmark.py`，支持批量分析 + 自动保存结果：
+
+```bash
+# 只输出到控制台
+python scripts/benchmark.py
+
+# 同时保存到文件（UTF-8 编码，避免控制台乱码）
+python scripts/benchmark.py --output result.txt
+```
+
+#### 架构决策：不需要 evolution-mcp
+
+| Agent | 使用的 MCP Server | 是否有专属 Server |
+|-------|------------------|------------------|
+| Community | github-mcp | ❌ |
+| Quality | filesystem-mcp + code-analysis-mcp | ❌ |
+| Security | osv-mcp | ❌ |
+| **Evolution** | github-mcp + osv-mcp + 少量内联 | ❌ |
+
+MCP Server 按「通用工具能力」划分，Agent 按「业务分析域」划分。一个 Agent 组合使用多个 Server 是正常设计。
+
+#### MCP 架构最终形态（4 个 Server）
 
 | Server | 职责 | 使用方 |
 |--------|------|--------|
-| github-mcp | GitHub 元数据 | Community Agent |
+| github-mcp | GitHub 元数据 | Community Agent + Evolution Agent |
 | filesystem-mcp | 文件系统操作 | Quality Agent |
 | code-analysis-mcp | 静态分析 | Quality Agent |
-| osv-mcp | 安全数据采集 | Security Agent |
+| osv-mcp | 安全数据采集 | Security Agent + Evolution Agent |
 
-### Phase 1.5：技术演进 Agent + Orchestrator 并发调度（待开始）
+### Phase 1 收尾清理
 
-- [ ] `backend/app/scoring/evolution.py` — 技术演进评分引擎（0-20 分）
-- [ ] `backend/app/agents/evolution_agent.py` — 技术演进 Agent
-- [ ] Orchestrator 升级为 `asyncio.gather` 并发调度 4 个 Agent
-- [ ] 加入综合评级计算（A+/A/B+/B/C/D）
-- [ ] 总分覆盖 100/100 分
+#### 移除 Phase 0 调试接口
+
+Phase 1 全部完成后，清理了 Phase 0 的临时调试代码：
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 删除 | `backend/app/api/v1/debug.py` | Phase 0 调试接口（`/api/v1/debug/repo/*`、`/api/v1/debug/all`） |
+| 修改 | `backend/app/main.py` | 移除 debug 路由的导入和注册 |
+| 修改 | `backend/app/services/github_service_legacy.py` | 更新 docstring，移除对 debug.py 的引用 |
+| 修改 | `README.md` | 移除 debug.py 在项目结构中的条目 |
+
+---
+
+## Phase 1 已知限制与遗留问题
+
+### 超大仓库分析超时
+
+**现象**：`vercel/next.js` 等大型 monorepo 在基准测试中触发 5 分钟超时。
+
+**根因**：Quality Agent 依赖 filesystem-mcp 进行 `git clone`，即使已启用浅克隆（`--depth 1 --single-branch --no-tags`），next.js 仓库体积仍然过大，300 秒不够完成下载。
+
+**影响范围**：
+- 仅影响超大仓库（>200MB 的 monorepo）
+- 中小型仓库（poetry、requests、click、fastapi）分析正常，平均耗时 40-60 秒
+
+**解决计划**：Phase 2 优化
+- filesystem-mcp 支持 `--filter=blob:none` 部分克隆
+- Quality Agent 对大仓库（>500MB）降级为「只检查文件结构，不跑 radon/AST」
+- 或增加超时阈值 + 异步任务队列（Celery），避免 HTTP 请求超时
 
 ---
 
@@ -301,38 +401,43 @@ docker-compose -f docker-compose.dev.yml build api
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
-### Phase 1.4 需要的新依赖
+### Phase 1.5 需要的新依赖
 
 ```bash
-# 宿主机安装（开发用）
-# osv-mcp 依赖同 github-mcp：mcp + httpx，已安装
+# 技术演进 Agent 使用 httpx 查询 PyPI/npm registry
+# httpx 已在 Phase 1.2 安装
 
 # 已确保 requirements.txt 包含：
 mcp>=1.0.0
 httpx>=0.27.0
 ```
 
+### Phase 1 修复记录
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| 301 重定向报错 | 仓库转移后 GitHub API 返回 301，httpx 默认不跟随 | `github-mcp` + `osv-mcp` 的 `AsyncClient` 添加 `follow_redirects=True` |
+| .env 未加载 | CLI 从 `backend` 目录运行，`config.py` 的 `env_file=".env"` 找不到根目录的 `.env` | `cli.py` 启动时自动加载根目录 `.env` 并注入 `os.environ` |
+| Windows GBK 乱码 | 控制台默认 GBK 编码不支持 Unicode 对勾符号 | `reporter.py` / `benchmark.py` 全部替换为 ASCII 字符 |
+
 ---
 
 ## 下一个具体动作
 
-**Phase 1.5：技术演进 Agent + Orchestrator 并发调度**
+**Phase 2：Web 平台 + Celery 异步任务 + React 前端**
 
-1. `backend/app/scoring/evolution.py` — 技术演进评分引擎（0-20 分）
-   - 发布频率评分
-   - 技术栈更新评分
-   - Breaking Change 评分
-   - 竞品对比评分（简化版）
-2. `backend/app/agents/evolution_agent.py` — 技术演进 Agent
-3. Orchestrator 串行改并行：`asyncio.gather(community, quality, security, evolution)`
-4. 综合评级算法：总分 → A+/A/B+/B/C/D
-5. 4 个热门项目基准测试
+详见 `PROJECT_PLAN.md` §10，简要：
+
+1. FastAPI REST API 完整实现（`/api/v1/analyze`、`/api/v1/tasks/{id}`、`/api/v1/reports/{id}`）
+2. Celery + Redis 异步任务队列接入
+3. React 前端：项目列表、报告详情、指标可视化
+4. PostgreSQL 数据持久化（AnalysisTask / DueDiligenceReport 写入）
+5. 多项目对比分析
+6. 5 个热门项目基准测试（PROJECT_PLAN §Phase 1 验收标准）
 
 ---
 
 ## Phase 2 及之后（概述）
-
-详见 `PROJECT_PLAN.md` §10，简要：
 
 | 阶段 | 目标 | 状态 |
 |------|------|------|

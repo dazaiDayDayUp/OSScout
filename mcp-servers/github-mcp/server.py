@@ -40,7 +40,7 @@ async def _github_get(path: str, params: dict | None = None) -> dict | list:
     超时 30 秒，适配 GitHub API 偶尔响应慢的情况。
     """
     async with _semaphore:
-        async with httpx.AsyncClient(headers=_HEADERS, timeout=30) as client:
+        async with httpx.AsyncClient(headers=_HEADERS, timeout=30, follow_redirects=True) as client:
             url = f"{GITHUB_API_BASE}{path}"
             response = await client.get(url, params=params)
             response.raise_for_status()

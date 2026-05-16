@@ -3,7 +3,7 @@ GitHub API 封装服务（Legacy 版本）
 
 Phase 1.1 之前的直接调用实现，含 Redis 缓存和并发控制。
 Phase 1.2 后，正式链路改用 mcp_github_service.py + github-mcp Server。
-此文件保留用于 debug.py 调试接口和应急回退。
+Phase 1.2 后不再使用，保留作为直接调用 GitHub API 的参考实现。
 """
 import asyncio
 from datetime import datetime, timedelta

@@ -53,6 +53,8 @@ class Reporter:
         lines.append("-" * 60)
         lines.append("综合评分")
         lines.append("-" * 60)
+        rating, rating_desc = self._get_rating(result.overall_percentage)
+        lines.append(f"评级: {rating}  ({rating_desc})")
         lines.append(self._render_score_bar(
             result.overall_score,
             result.overall_max_score,
@@ -84,6 +86,12 @@ class Reporter:
             lines.append(self._render_dimension(security))
             lines.append("")
 
+        # 技术演进
+        evolution = result.dimensions.get("evolution", {})
+        if evolution:
+            lines.append(self._render_dimension(evolution))
+            lines.append("")
+
         # 关键发现
         if result.findings:
             lines.append("-" * 60)
@@ -108,6 +116,31 @@ class Reporter:
         lines.append("=" * 60)
 
         return "\n".join(lines)
+
+    def _get_rating(self, percentage: float) -> tuple[str, str]:
+        """
+        根据总分百分比计算综合评级
+
+        评级标准（PROJECT_PLAN §7.2）：
+        - A+ (90-100): 强烈推荐，项目非常健康
+        - A  (80-89):  推荐，可以安全使用
+        - B+ (70-79):  谨慎推荐，存在可接受的小风险
+        - B  (60-69):  可用，但需要关注特定风险点
+        - C  (50-59):  谨慎使用，存在明显风险
+        - D  (<50):    不建议使用
+        """
+        if percentage >= 90:
+            return "A+", "强烈推荐，项目非常健康"
+        elif percentage >= 80:
+            return "A", "推荐，可以安全使用"
+        elif percentage >= 70:
+            return "B+", "谨慎推荐，存在可接受的小风险"
+        elif percentage >= 60:
+            return "B", "可用，但需要关注特定风险点"
+        elif percentage >= 50:
+            return "C", "谨慎使用，存在明显风险"
+        else:
+            return "D", "不建议使用"
 
     def _render_score_bar(self, score: int, max_score: int, percentage: float) -> str:
         """
@@ -150,6 +183,10 @@ class Reporter:
                 "dependency_vulns": "依赖漏洞",
                 "license_risk": "许可证风险",
                 "response_speed": "安全响应速度",
+                "release_frequency": "发布频率",
+                "tech_stack_freshness": "技术栈更新",
+                "breaking_change": "Breaking Change",
+                "competitor_comparison": "竞品对比",
             }
             name = name_map.get(key, key)
             score = item.get("score", 0)

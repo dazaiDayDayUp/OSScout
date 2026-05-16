@@ -12,7 +12,7 @@
 
 后端服务、数据库、缓存、Docker 开发环境均已跑通。
 
-### Phase 1（MVP -- CLI 分析）进行中
+### Phase 1（MVP -- CLI 分析）已完成
 
 **Phase 1.1 已完成**：社区健康度 Agent + CLI 端到端打通。
 
@@ -22,31 +22,39 @@
 
 **Phase 1.4 已完成**：安全分析 Agent，新建 `osv-mcp` Server（安全数据采集中心），覆盖 OSV 漏洞查询 + 许可证风险评估。
 
+**Phase 1.5 已完成**：技术演进 Agent + Orchestrator 并发调度。四个维度全部打通，总分覆盖 100/100 分。
+
 ```bash
 # 分析指定仓库，输出文本报告
-python -m app.cli analyze https://github.com/psf/requests
+python -m app.cli analyze https://github.com/python-poetry/poetry
 
-# 输出示例（三个维度，80/100 分）
-总分 33/80 [########------------] 41.2%
+# 输出示例（四个维度，100/100 分）
+总分 58/100 [#############-------] 58.0%
 
-[community]  14/30 (46.7%)
+[community]  18/30 (60.0%)
   Bus Factor: 0/10 (2)          -- 2 人覆盖 50% 贡献，集中风险高
-  Issue 响应: 8/8 (0.0 天)       -- 处理极快
-  PR 合并率: 0/6 (21%)           -- 偏低
+  Issue 响应: 8/8 (0.5 天)       -- 处理极快
+  PR 合并率: 4/6 (65%)           -- 良好
   活跃贡献者: 4/4 (100 人)        -- 社区健康
-  Release: 2/2 (0.8 个月前)      -- 维护活跃
+  Release: 2/2 (0.2 个月前)      -- 维护活跃
 
-[quality]    14/25 (56.0%)
+[quality]    21/25 (84.0%)
   测试覆盖率: 6/8  (有 tests + CI)
-  静态分析漏洞: 0/7 (3 高危)       -- 需修复
+  静态分析漏洞: 7/7 (0 高危)
   文档完整度: 3/5  (2/4 项)
-  代码复杂度: 5/5  (平均 3.21，优秀)
+  代码复杂度: 5/5  (平均 4.12，优秀)
 
 [security]    5/25 (20.0%)
-  CVE 记录: 0/10 (46高危, 2中危, 19低危)  -- 历史漏洞较多
-  依赖漏洞: 0/8  (122 个依赖漏洞)
-  许可证风险: 5/5 (BSD-3-Clause，商业安全)
-  安全响应速度: 0/2 (平均 1873 天)
+  CVE 记录: 0/10 (6高危, 3中危, 2低危)
+  依赖漏洞: 0/8  (17 个依赖漏洞)
+  许可证风险: 5/5 (MIT License，商业安全)
+  安全响应速度: 0/2 (平均 1666 天)
+
+[evolution]  14/20 (70.0%)
+  发布频率: 4/6 (10次/年，约每2月1次)
+  技术栈更新: 6/6 (所有依赖均为最新版本)
+  Breaking Change: 4/4 (4次 major bump，均有文档说明)
+  竞品对比: 0/4 (Phase 2 接入)
 ```
 
 ### 已验证的功能
@@ -59,10 +67,12 @@ python -m app.cli analyze https://github.com/psf/requests
   - filesystem-mcp：仓库克隆 + 文件操作
   - code-analysis-mcp：radon 圈复杂度 + AST 安全扫描
   - osv-mcp：SBOM 依赖提取 + OSV 漏洞查询 + 许可证检查
+- **Orchestrator 并发调度**：`asyncio.gather` 并行运行 4 个 Agent，错误隔离（单 Agent 失败不影响其他）
 - 社区健康度评分引擎（5 项指标：Bus Factor / Issue 响应 / PR 合并率 / 活跃贡献者 / Release）
 - 代码质量评分引擎（4 项指标：测试覆盖 / 静态分析 / 文档 / 复杂度）
-- **安全评分引擎（4 项指标：CVE 记录 / 依赖漏洞 / 许可证风险 / 响应速度）**
-- CLI 入口：`python -m app.cli analyze <repo_url>`（输出三维度报告）
+- 安全评分引擎（4 项指标：CVE 记录 / 依赖漏洞 / 许可证风险 / 响应速度）
+- **技术演进评分引擎（3 项指标 + 1 项占位：发布频率 / 技术栈更新 / Breaking Change / 竞品对比）**
+- CLI 入口：`python -m app.cli analyze <repo_url>`（输出四维度报告）
 - 结构化日志 + 全局异常处理已接入
 - Docker Compose 一键启动开发环境
 
@@ -100,7 +110,19 @@ python -m app.cli analyze https://github.com/python-poetry/poetry
 docker-compose -f docker-compose.dev.yml exec api python -m app.cli analyze https://github.com/python-poetry/poetry
 ```
 
-### 3. 数据库连接（DataGrip / DBeaver）
+### 3. 运行基准测试
+
+对 5 个热门项目进行批量分析，验证评分体系合理性：
+
+```bash
+# 只输出到控制台
+python ../scripts/benchmark.py
+
+# 同时保存到文件
+python ../scripts/benchmark.py --output benchmark_result.txt
+```
+
+### 4. 数据库连接（DataGrip / DBeaver）
 
 - PostgreSQL：`localhost:5432`，用户名 `osscout`，密码 `ossscout`
 - Redis：`localhost:6379`，无密码
@@ -112,6 +134,7 @@ osscout/
 ├── README.md
 ├── PROJECT_PLAN.md           # 完整项目规划
 ├── CLAUDE.md                 # 协作规范
+├── PROGRESS.md               # 开发进度记录
 ├── docker-compose.dev.yml    # 开发环境编排
 │
 ├── backend/                  # FastAPI 后端
@@ -119,27 +142,29 @@ osscout/
 │   │   ├── main.py           # FastAPI 入口
 │   │   ├── config.py         # 配置管理
 │   │   ├── cli.py            # CLI 入口
-│   │   ├── api/v1/           # REST 接口
-│   │   │   └── debug.py      # 调试接口（Phase 0 验证用）
+│   │   ├── api/v1/           # REST 接口（Phase 2 接入）
 │   │   ├── core/             # 基础设施
 │   │   │   ├── models.py     # 数据库模型
 │   │   │   ├── database.py   # 异步数据库引擎
 │   │   │   ├── cache.py      # Redis 缓存（含降级容错）
 │   │   │   └── logger.py     # 结构化日志
 │   │   ├── agents/           # Agent 层
-│   │   │   ├── orchestrator.py   # 协调器（串行调度 3 个 Agent）
+│   │   │   ├── orchestrator.py   # 协调器（asyncio.gather 并发调度 4 个 Agent）
 │   │   │   ├── community_agent.py
 │   │   │   ├── quality_agent.py
-│   │   │   ├── security_agent.py   # 安全分析 Agent（Phase 1.4）
+│   │   │   ├── security_agent.py
+│   │   │   ├── evolution_agent.py  # 技术演进 Agent（Phase 1.5）
 │   │   │   └── reporter.py         # 报告格式化
 │   │   ├── scoring/          # 评分体系
 │   │   │   ├── community.py      # 社区健康度评分（0-30）
 │   │   │   ├── quality.py        # 代码质量评分（0-25）
-│   │   │   └── security.py       # 安全评分（0-25，Phase 1.4）
+│   │   │   ├── security.py       # 安全评分（0-25）
+│   │   │   └── evolution.py      # 技术演进评分（0-20，Phase 1.5）
 │   │   ├── services/         # 业务逻辑
 │   │   │   ├── github_service_legacy.py
 │   │   │   ├── mcp_github_service.py
-│   │   │   └── security_service.py   # MCP 模式安全数据采集（Phase 1.4）
+│   │   │   ├── security_service.py
+│   │   │   └── evolution_service.py  # 技术演进数据采集（Phase 1.5）
 │   │   ├── mcp/              # MCP 客户端
 │   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis / OSV Client
 │   │   ├── rag/              # RAG 模块（Phase 3）
@@ -153,7 +178,7 @@ osscout/
 │   ├── github-mcp/           # GitHub 元数据查询
 │   ├── filesystem-mcp/       # 仓库克隆 + 文件操作
 │   ├── code-analysis-mcp/    # 代码静态分析（radon + AST）
-│   └── osv-mcp/              # 安全数据采集中心（SBOM + OSV + license，Phase 1.4）
+│   └── osv-mcp/              # 安全数据采集中心（SBOM + OSV + license）
 ├── tmp/                      # 临时目录（MCP Server 克隆的仓库，gitignored）
 ├── knowledge-base/           # RAG 知识库文档（Phase 3）
 ├── scripts/                  # 工具脚本
@@ -168,8 +193,8 @@ osscout/
 | Phase 1.1 | 社区健康 Agent + CLI 端到端打通 | 已完成 |
 | Phase 1.2 | 抽出 github-mcp server | 已完成 |
 | Phase 1.3 | 代码质量 Agent | 已完成 |
-| **Phase 1.4** | **安全分析 Agent（osv-mcp + 漏洞 + 许可证）** | **已完成** |
-| Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度 | 待开始 |
+| Phase 1.4 | 安全分析 Agent（osv-mcp + 漏洞 + 许可证） | 已完成 |
+| Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度 | 已完成 |
 | Phase 2 | Web 平台 + 异步任务 + React 前端 | 待开始 |
 | Phase 3 | Agent 智能化 + RAG | 待开始 |
 | Phase 4 | 持续监控 + 预警 | 待开始 |
@@ -183,6 +208,13 @@ osscout/
 - **LLM**：Claude / GPT（Phase 3 接入）
 - **前端**：React 18 + TailwindCSS（Phase 2）
 - **部署**：Docker Compose + Railway/Render
+
+## 已知限制
+
+| 限制 | 说明 | 计划解决 |
+|------|------|----------|
+| 超大仓库超时 | `vercel/next.js` 等 monorepo 可能触发 5 分钟超时（git clone 耗时过长） | Phase 2：部分克隆 + 大仓库降级策略 |
+| Windows 控制台乱码 | 中文输出在默认 GBK 编码控制台显示为乱码，不影响文件保存 | 建议用 `--output` 参数导出到文件查看 |
 
 ---
 

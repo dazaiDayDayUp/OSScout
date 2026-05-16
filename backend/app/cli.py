@@ -13,7 +13,10 @@ CLI 入口
 
 import argparse
 import asyncio
+import os
 import sys
+
+from dotenv import load_dotenv
 
 from app.agents.orchestrator import Orchestrator
 from app.agents.reporter import Reporter
@@ -21,6 +24,11 @@ from app.agents.reporter import Reporter
 
 def main():
     """CLI 主入口，解析参数并分发到对应子命令"""
+    # 自动加载根目录的 .env 文件，确保 GITHUB_TOKEN 等环境变量传递给 MCP Server 子进程
+    env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+
     parser = argparse.ArgumentParser(
         prog="osscout",
         description="开源项目深度尽调 Agent 平台 CLI",

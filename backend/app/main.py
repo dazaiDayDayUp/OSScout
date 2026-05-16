@@ -8,7 +8,6 @@ from typing import Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import debug as debug_router
 from app.core.database import init_db
 from app.core.logger import configure_logging, get_logger
 
@@ -39,7 +38,7 @@ app = FastAPI(
 )
 
 # 注册 v1 版本的所有子路由，统一前缀 /api/v1
-app.include_router(debug_router.router, prefix="/api/v1")
+# Phase 2 将在此注册 analyze / tasks / reports 等正式接口
 
 
 @app.middleware("http")
