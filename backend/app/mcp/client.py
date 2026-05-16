@@ -1,0 +1,127 @@
+"""
+MCP 客户端封装
+
+提供与各个 MCP Server 的通信能力，让上层代码像调用普通函数一样使用工具。
+
+支持的 Server：
+- github-mcp：GitHub API 查询
+- filesystem-mcp：文件系统操作（克隆、读取、遍历）
+- code-analysis-mcp：代码静态分析（Semgrep、radon）
+"""
+
+import json
+import os
+from contextlib import AsyncExitStack
+from typing import Any
+
+from mcp.client.session import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
+
+
+class _BaseMCPClient:
+    """
+    MCP Client 通用基类
+
+    封装了 Server 进程生命周期管理（启动 → initialize 握手 → 请求 → 清理），
+    子类只需覆盖 SERVER_MODULE 指定对应的 Server 目录名。
+    """
+
+    # 子类覆盖：对应 mcp-servers/ 下的目录名
+    SERVER_MODULE = ""
+
+    def __init__(self, server_command: list[str] | None = None):
+        self.server_command = server_command or self._default_command()
+        self._session: ClientSession | None = None
+        self._exit_stack = AsyncExitStack()
+
+    def _default_command(self) -> list[str]:
+        """
+        自动探测 Server 启动方式
+
+        优先从源码路径找到 server.py（开发模式），
+        找不到则回退到 pip 安装的入口命令（生产模式）。
+        """
+        client_dir = os.path.dirname(__file__)
+        server_py = os.path.abspath(
+            os.path.join(
+                client_dir, "..", "..", "..",
+                "mcp-servers", self.SERVER_MODULE, "server.py"
+            )
+        )
+        if os.path.exists(server_py):
+            return ["python", server_py]
+        # 回退：pip 安装的入口命令（如 github-mcp、filesystem-mcp）
+        return [self.SERVER_MODULE]
+
+    async def __aenter__(self):
+        """启动 Server 连接，完成 MCP initialize 握手"""
+        params = StdioServerParameters(
+            command=self.server_command[0],
+            args=self.server_command[1:],
+            env={**os.environ},
+        )
+
+        # 第一层：stdio 传输层
+        stdio_transport = await self._exit_stack.enter_async_context(
+            stdio_client(params)
+        )
+        read_stream, write_stream = stdio_transport
+
+        # 第二层：MCP 协议会话
+        self._session = await self._exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
+        await self._session.initialize()
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """按逆序清理资源"""
+        await self._exit_stack.aclose()
+        self._session = None
+
+    async def list_tools(self) -> list[str]:
+        """获取 Server 暴露的所有工具名称"""
+        if not self._session:
+            raise RuntimeError("Client 未连接，请先使用 async with 进入上下文")
+
+        result = await self._session.list_tools()
+        return [tool.name for tool in result.tools]
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        """
+        调用指定的 MCP tool
+
+        Args:
+            name: Tool 名称
+            arguments: Tool 参数
+
+        Returns:
+            Tool 返回的 JSON 数据，已解析为 Python 对象
+        """
+        if not self._session:
+            raise RuntimeError("Client 未连接，请先使用 async with 进入上下文")
+
+        result = await self._session.call_tool(name, arguments)
+
+        if result.isError:
+            error_text = result.content[0].text if result.content else "未知错误"
+            raise RuntimeError(f"MCP tool 调用失败 [{name}]: {error_text}")
+
+        text = result.content[0].text
+        return json.loads(text)
+
+
+class GitHubMCPClient(_BaseMCPClient):
+    """GitHub MCP Server 客户端"""
+    SERVER_MODULE = "github-mcp"
+
+
+class FilesystemMCPClient(_BaseMCPClient):
+    """Filesystem MCP Server 客户端"""
+    SERVER_MODULE = "filesystem-mcp"
+
+
+class CodeAnalysisMCPClient(_BaseMCPClient):
+    """Code Analysis MCP Server 客户端"""
+    SERVER_MODULE = "code-analysis-mcp"

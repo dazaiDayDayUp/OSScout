@@ -66,10 +66,16 @@ class Reporter:
         lines.append("-" * 60)
         lines.append("")
 
-        # 社区健康度（目前唯一维度）
+        # 社区健康度
         community = result.dimensions.get("community", {})
         if community:
             lines.append(self._render_dimension(community))
+            lines.append("")
+
+        # 代码质量
+        quality = result.dimensions.get("quality", {})
+        if quality:
+            lines.append(self._render_dimension(quality))
             lines.append("")
 
         # 关键发现
@@ -130,6 +136,10 @@ class Reporter:
                 "pr_merge_rate": "PR 合并率",
                 "active_contributors": "活跃贡献者",
                 "release_stability": "Release 稳定性",
+                "test_coverage": "测试覆盖率",
+                "static_analysis": "静态分析漏洞",
+                "documentation": "文档完整度",
+                "code_complexity": "代码复杂度",
             }
             name = name_map.get(key, key)
             score = item.get("score", 0)

@@ -5,7 +5,7 @@
 """
 from fastapi import APIRouter
 
-from app.services import github_service
+from app.services import github_service_legacy as github_service
 
 # 创建调试路由器，所有接口前缀为 /debug
 router = APIRouter(prefix="/debug", tags=["调试接口"])

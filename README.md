@@ -16,17 +16,29 @@
 
 **Phase 1.1 已完成**：社区健康度 Agent + CLI 端到端打通。
 
+**Phase 1.2 已完成**：抽出 `github-mcp` Server，通过 MCP 协议调用 GitHub API。
+
+**Phase 1.3 已完成**：代码质量 Agent，新增 filesystem-mcp + code-analysis-mcp。
+
 ```bash
 # 分析指定仓库，输出文本报告
-python -m app.cli analyze https://github.com/python-poetry/poetry
+python -m app.cli analyze https://github.com/psf/requests
 
-# 输出示例
-总分 18/30 [############--------] 60.0%
-Bus Factor: 0/10 (2)         -- 仅 2 人覆盖 50% 贡献
-Issue 响应: 8/8 (0.6 天)      -- 处理极快
-PR 合并率: 4/6 (66%)          -- 良好
-活跃贡献者: 4/4 (100 人)       -- 社区健康
-Release: 2/2 (0.2 个月前)     -- 维护活跃
+# 输出示例（两个维度）
+总分 36/55 [#############-------] 65.5%
+
+[community]  22/30 (73.3%)
+  Bus Factor: 6/10 (3)          -- 3 人覆盖 50% 贡献
+  Issue 响应: 8/8 (0.1 天)       -- 处理极快
+  PR 合并率: 2/6 (34%)           -- 偏低
+  活跃贡献者: 4/4 (100 人)        -- 社区健康
+  Release: 2/2 (0.0 个月前)      -- 维护活跃
+
+[quality]    14/25 (56.0%)
+  测试覆盖率: 6/8  (有 tests + CI)
+  静态分析漏洞: 7/7 (0 高危)
+  文档完整度: 3/5  (2/4 项)
+  代码复杂度: 5/5  (平均 2.84，优秀)
 ```
 
 ### 已验证的功能
@@ -34,9 +46,10 @@ Release: 2/2 (0.2 个月前)     -- 维护活跃
 - FastAPI 后端服务正常运行（`http://localhost:8000/health`）
 - PostgreSQL 数据库 4 张核心表已创建（Repository / AnalysisTask / DueDiligenceReport / MetricHistory）
 - Redis 缓存服务正常运行，冷热请求差距 40 倍+
-- GitHub API 封装完成（6 个接口并发 + 缓存 + 限频控制）
+- **MCP 协议链路**：github-mcp + filesystem-mcp + code-analysis-mcp 全部打通
 - 社区健康度评分引擎（5 项指标规则评分）
-- CLI 入口：`python -m app.cli analyze <repo_url>`
+- 代码质量评分引擎（4 项指标：测试覆盖 / 静态分析 / 文档 / 复杂度）
+- CLI 入口：`python -m app.cli analyze <repo_url>`（输出双维度报告）
 - 结构化日志 + 全局异常处理已接入
 - Docker Compose 一键启动开发环境
 
@@ -102,14 +115,18 @@ osscout/
 │   │   │   ├── cache.py      # Redis 缓存
 │   │   │   └── logger.py     # 结构化日志
 │   │   ├── agents/           # Agent 层
-│   │   │   ├── orchestrator.py   # 协调器
+│   │   │   ├── orchestrator.py   # 协调器（串行调度 community + quality）
 │   │   │   ├── community_agent.py
+│   │   │   ├── quality_agent.py  # 代码质量 Agent（Phase 1.3）
 │   │   │   └── reporter.py       # 报告格式化
 │   │   ├── scoring/          # 评分体系
-│   │   │   └── community.py      # 社区健康度评分
+│   │   │   ├── community.py      # 社区健康度评分
+│   │   │   └── quality.py        # 代码质量评分（Phase 1.3）
 │   │   ├── services/         # 业务逻辑
-│   │   │   └── github_service.py # GitHub API 封装
-│   │   ├── mcp/              # MCP 客户端（Phase 1.2）
+│   │   │   ├── github_service_legacy.py  # 旧版直接调用（保留调试）
+│   │   │   └── mcp_github_service.py     # MCP 版本（Phase 1.2）
+│   │   ├── mcp/              # MCP 客户端（Phase 1.2+）
+│   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis Client
 │   │   ├── rag/              # RAG 模块（Phase 3）
 │   │   └── tasks/            # Celery 任务（Phase 2）
 │   ├── tests/
@@ -118,7 +135,10 @@ osscout/
 ├── frontend/                 # React 前端（Phase 2）
 │   └── src/{components,pages,api,types}
 ├── mcp-servers/              # MCP Server 独立包（Phase 1.2+）
-│   └── github-mcp/
+│   ├── github-mcp/           # GitHub API 查询
+│   ├── filesystem-mcp/       # 仓库克隆 + 文件操作（Phase 1.3）
+│   └── code-analysis-mcp/    # 代码静态分析（Phase 1.3）
+├── tmp/                      # 临时目录（MCP Server 克隆的仓库，gitignored）
 ├── knowledge-base/           # RAG 知识库文档（Phase 3）
 ├── scripts/                  # 工具脚本
 └── docs/                     # 项目文档
@@ -130,8 +150,8 @@ osscout/
 |------|------|------|
 | Phase 0 | 基础设施（脚手架、Docker、数据库、GitHub API） | 已完成 |
 | Phase 1.1 | 社区健康 Agent + CLI 端到端打通 | 已完成 |
-| Phase 1.2 | 抽出 github-mcp server | 待开始 |
-| Phase 1.3 | 代码质量 Agent | 待开始 |
+| Phase 1.2 | 抽出 github-mcp server | 已完成 |
+| Phase 1.3 | 代码质量 Agent | 已完成 |
 | Phase 1.4 | 安全分析 Agent | 待开始 |
 | Phase 1.5 | Orchestrator 并发 + 综合评级 | 待开始 |
 | Phase 2 | Web 平台 + 异步任务 + React 前端 | 待开始 |

@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel
 
 from app.scoring.community import score_community_health, CommunityScoreResult
-from app.services import github_service
+from app.services import mcp_github_service as github_service
 
 
 class CommunityAgentResult(BaseModel):

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "github-mcp"
+version = "0.1.0"
+description = "GitHub API 的 MCP Server 实现，通过 stdio 协议暴露 GitHub 数据查询工具"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+github-mcp = "server:main"
+
+[tool.setuptools]
+py-modules = ["server"]

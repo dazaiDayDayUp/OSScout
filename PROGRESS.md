@@ -5,7 +5,7 @@
 
 ---
 
-## 当前状态：Phase 1.1 完成，即将进入 Phase 1.2
+## 当前状态：Phase 1.3 完成，即将进入 Phase 1.4
 
 **最近更新**：2026-05-16
 
@@ -112,18 +112,87 @@ $ python -m app.cli analyze https://github.com/python-poetry/poetry
 - Windows 控制台 GBK 编码导致中文输出乱码（代码本身无问题，终端编码设置问题）
 - Reporter 进度条字符已改用 `#` `-` 兼容 GBK
 
-### Phase 1.2：抽出 github-mcp server（待开始）
+### Phase 1.2：抽出 github-mcp server（已完成 ✅）
 
-- [ ] 引入 `mcp` Python SDK 依赖
-- [ ] `mcp-servers/github-mcp/server.py` — 独立的 MCP server 进程
-- [ ] `backend/app/mcp/client.py` — MCP Client 封装
-- [ ] 改造 `community_agent` 通过 MCP 调用而非直接调 service
+**决策回顾**：MCP Server 职责尽量"薄"——只做协议转换 + GitHub API 调用，缓存留在上层。
 
-### Phase 1.3：代码质量 Agent（待开始）
+#### 新增/修改的文件
 
-- [ ] `filesystem-mcp` server（仓库克隆 + 文件操作）
-- [ ] `code-analysis-mcp` server（Semgrep + radon）
-- [ ] `backend/app/scoring/quality.py` + `quality_agent.py`
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `mcp-servers/github-mcp/server.py` | MCP Server 主进程（stdio 模式，6 个 tools） | 211 |
+| `mcp-servers/github-mcp/pyproject.toml` | 独立包配置，入口命令 `github-mcp` | 18 |
+| `backend/app/mcp/client.py` | MCP Client 封装（生命周期管理 + JSON 解析） | 118 |
+| `backend/app/services/mcp_github_service.py` | 兼容层：接口同 `github_service.py`，内部走 MCP | 47 |
+| `backend/app/agents/community_agent.py` | 修改 1 行 import，切到 MCP 版本 | 改 1 行 |
+| `backend/requirements.txt` | 启用 `mcp>=1.0.0` 依赖 | 改 1 行 |
+
+#### MCP 链路验证
+
+```
+CLI → orchestrator → community_agent → mcp_github_service
+                                              ↓
+                                    GitHubMCPClient (stdio)
+                                              ↓
+                                    github-mcp Server (子进程)
+                                              ↓
+                                          GitHub API
+```
+
+- `list_tools()` 返回 6 个 tool，名称和描述正确
+- `call_tool("get_repo_metadata", ...)` 返回真实数据（python-poetry/poetry，34274 stars）
+- CLI 端到端分析结果与 Phase 1.1 完全一致（总分 18/30）
+
+### Phase 1.3：代码质量 Agent（已完成 ✅）
+
+**决策回顾**：
+- code-analysis-mcp 原本计划用 subprocess 调用 semgrep/radon 命令行，但 Windows 上 MCP stdio + subprocess 有深层死锁问题
+- 最终方案：radon 用 Python API（`cc_visit`），安全扫描用 AST 静态分析（简化版），避开命令行调用
+- filesystem-mcp 保持命令行调用（git clone），因为需要在独立进程中执行
+
+#### 新增文件
+
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `mcp-servers/filesystem-mcp/server.py` | MCP Server：仓库克隆、文件读取、目录遍历 | 178 |
+| `mcp-servers/code-analysis-mcp/server.py` | MCP Server：radon 复杂度分析 + AST 安全扫描 | 212 |
+| `backend/app/mcp/client.py` | 重构为基类模式，新增 FilesystemMCPClient、CodeAnalysisMCPClient | 115 |
+| `backend/app/scoring/quality.py` | 代码质量四项指标评分规则 | 189 |
+| `backend/app/agents/quality_agent.py` | Agent 主体：克隆 → 采集 → 评分 → 输出 | 132 |
+| `backend/app/agents/orchestrator.py` | 新增 quality_agent 调度 | 改 |
+| `backend/app/agents/reporter.py` | 新增 quality 维度显示 | 改 |
+| `backend/requirements.txt` | 启用 semgrep、radon 依赖 | 改 |
+
+#### 端到端验证结果（psf/requests）
+
+```bash
+$ python -m app.cli analyze https://github.com/psf/requests
+总分 36/55 [#############-------] 65.5%
+
+[community]  22/30 (73.3%)
+  Bus Factor: 6/10 (3)
+  Issue 响应: 8/8 (0.1 天)
+  PR 合并率: 2/6 (34.0%)
+  活跃贡献者: 4/4 (100 人)
+  Release: 2/2 (0.0 个月前)
+
+[quality]    14/25 (56.0%)
+  测试覆盖率: 6/8  (有 tests + CI)
+  静态分析漏洞: 7/7 (0 高危)
+  文档完整度: 3/5  (2/4 项)
+  代码复杂度: 5/5  (平均 2.84，优秀)
+```
+
+#### 遇到的坑与解决
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| git clone 网络超时 | GitHub 访问慢 | `git config --global http.https://github.com.proxy socks5://127.0.0.1:10808` |
+| WinError 5 拒绝访问 | `.git` 文件只读，`shutil.rmtree` 删不掉 | `os.chmod(path, stat.S_IWRITE)` 改权限后删除 |
+| MCP stdio 卡死 | git 子进程继承 Server 的 stdin | `subprocess.run(stdin=subprocess.DEVNULL, ...)` |
+| 安全扫描 8 个误报 | 扫描了 `tests/` 目录 | `_EXCLUDE_DIRS` 添加 `tests`, `test` |
+| radon `-a` 抑制 JSON | Windows 上 radon `-a` 参数不兼容 JSON 输出 | 去掉 `-a`，自己计算平均值 |
+| semgrep subprocess 死锁 | Windows 上 MCP stdio + subprocess 冲突 | 改用 Python AST 自研扫描（简化版） |
 
 ### Phase 1.4：安全分析 Agent（待开始）
 
@@ -139,11 +208,59 @@ $ python -m app.cli analyze https://github.com/python-poetry/poetry
 
 ---
 
+---
+
+## 环境注意事项（重要）
+
+### 宿主机 vs Docker 环境隔离
+
+**关键事实**：宿主机上 `pip install` 安装的包，Docker 容器内**默认看不到**。
+
+```
+宿主机 Windows Python
+  └── pip install mcp semgrep radon  → 只在这里
+
+Docker 容器 Linux Python
+  └── 只认 Dockerfile / requirements.txt 构建时装的包
+```
+
+**当前状态**：
+- 宿主机已安装：`mcp`、`httpx`（Phase 1.2 开发时装的）
+- Docker 镜像里有：`fastapi`、`sqlalchemy`、`redis` 等（Phase 0 构建时装入的）
+- **Docker 里没有**：`mcp` — Phase 1.2 代码在 Docker 内运行会报 `ModuleNotFoundError`
+
+**开发策略**：
+- **Phase 1 阶段**：宿主机开发为主，快速迭代，每次 Phase 完成后再统一更新 requirements.txt + 重建镜像
+- **Phase 2 及之后**：进入 Docker 开发，确保和生产环境一致
+
+**重建 Docker 镜像命令**：
+```bash
+# 每完成一个 Phase，更新 requirements.txt 后执行
+docker-compose -f docker-compose.dev.yml build api
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+### Phase 1.3 需要的新依赖
+
+```bash
+# 宿主机安装（开发用）
+pip install semgrep radon
+
+# 已追加到 requirements.txt
+semgrep>=1.100.0
+radon>=6.0.0
+```
+
+---
+
 ## 下一个具体动作
 
-**Phase 1.2：把 GitHub 数据采集抽成独立的 `github-mcp` server**
+**Phase 1.4：安全分析 Agent**
 
-需要向用户解释 MCP 是什么、为什么需要它、在本项目中的作用，再开始写代码。
+1. `osv-mcp` server（开源漏洞数据库 OSV 查询）
+2. `backend/app/scoring/security.py` + `security_agent.py`
+3. 许可证风险检查（MIT/Apache/GPL 识别）
+4. 更新 Orchestrator，串行调度 security_agent（三个 Agent）
 
 ---
 
