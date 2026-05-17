@@ -1,16 +1,4 @@
-"""
-技术演进数据采集服务
-
-采集技术演进分析所需的全部数据：
-1. GitHub 发布历史（releases）—— 计算发布频率
-2. 依赖清单（SBOM）—— 通过 osv-mcp 获取
-3. 各依赖最新版本 —— 直接查询 PyPI / npm registry
-4. Breaking Change 指标 —— 从 release notes 和 tag_name 推断
-
-使用方式：
-    from app.services.evolution_service import collect_evolution_data
-    data = await collect_evolution_data("python-poetry", "poetry")
-"""
+"""技术演进数据采集：releases + SBOM + PyPI/npm 最新版本 + Breaking Change 检测"""
 
 import asyncio
 import json

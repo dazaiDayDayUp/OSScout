@@ -575,19 +575,68 @@ Response: 200 OK
 
 ### Phase 2：V1 — Web 平台 + 多项目（Week 4-5）
 
-**目标**：Web UI + API + 异步任务
+**目标**：Web UI + API + 异步任务 + 数据持久化
 
-- [ ] FastAPI REST API 完整实现
-- [ ] Celery 异步任务队列接入
-- [ ] React 前端（项目列表、报告详情、指标可视化）
-- [ ] PostgreSQL 数据持久化
-- [ ] Redis 缓存层
-- [ ] 多项目对比分析
-- [ ] 搜索-mcp 实现（新闻/社区讨论采集）
-- [ ] 技术演进 Agent 实现
+Phase 2 拆分为 5 个小阶段递进执行：
+
+#### Phase 2.1：REST API 骨架 + 数据库持久化
+
+- [x] `POST /api/v1/analyze` — 提交分析任务，返回 task_id
+- [x] `GET /api/v1/tasks/{task_id}` — 查询任务状态
+- [x] `GET /api/v1/reports/{report_id}` — 获取报告详情
+- [x] 分析结果写入 PostgreSQL（AnalysisTask / DueDiligenceReport）
+- [x] **此阶段任务同步执行**（类似 CLI），接口已设计成异步风格
 
 **验收标准**：
-- Web UI 可浏览报告、查看趋势图表
+- curl/Postman 可完整调用：提交 → 查询状态 → 获取报告
+- 数据能在 DataGrip 中查到
+
+#### Phase 2.2：Celery 异步任务队列
+
+- [ ] Celery 应用配置（Redis broker）
+- [ ] `run_due_diligence` 异步任务
+- [ ] `/api/v1/analyze` 改为"提交 Celery 任务 + 立即返回 task_id"
+- [ ] docker-compose.dev.yml 启用 worker 服务
+
+**验收标准**：
+- 提交任务后立即返回，不阻塞 HTTP 响应
+- worker 日志可见任务执行过程
+- 超大仓库分析不触发 HTTP 超时
+
+#### Phase 2.3：多项目对比 + 历史趋势接口
+
+- [ ] `POST /api/v1/compare` — 批量提交多个仓库，返回对比报告
+- [ ] `GET /api/v1/repos/{id}/history` — 某仓库历次分析的指标趋势
+- [ ] 报告列表查询（分页）
+
+**验收标准**：
+- 支持同时对比 2-3 个仓库
+- 历史趋势接口返回时序数据
+
+#### Phase 2.4：React 前端骨架
+
+- [ ] HTTP 客户端封装（api/client.ts）
+- [ ] 首页：提交分析表单（输入 repo_url）
+- [ ] 报告详情页：文本版报告展示
+- [ ] 路由配置（React Router）
+
+**验收标准**：
+- 浏览器可提交分析、查看报告
+- 前端调用真实 API，非 mock 数据
+
+#### Phase 2.5：前端可视化
+
+- [ ] 评分仪表盘组件（环形图）
+- [ ] 各维度评分条形图
+- [ ] 对比页面（并排展示多项目）
+- [ ] 仓库列表页（历史分析记录）
+
+**验收标准**：
+- Web UI 可浏览报告、查看可视化评分
+- 对比页面并排展示多项目数据
+
+**Phase 2 总体验收标准**：
+- 完整链路：前端提交 → API 接收 → Celery 执行 → 数据库存储 → 前端展示
 - 支持批量提交分析任务
 - API 响应时间 <200ms（缓存命中）
 

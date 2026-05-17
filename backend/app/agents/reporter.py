@@ -1,19 +1,4 @@
-"""
-文本报告格式化器
-
-将 Orchestrator 输出的结构化结果转换为人类可读的 Markdown 风格文本报告。
-
-使用方式：
-    from app.agents.reporter import Reporter
-    from app.agents.orchestrator import Orchestrator
-
-    orchestrator = Orchestrator()
-    result = await orchestrator.analyze(repo_url)
-
-    reporter = Reporter()
-    text = reporter.format_text(result)
-    print(text)
-"""
+"""文本报告格式化器：将结构化结果转换为 Markdown 风格文本报告"""
 
 from app.agents.orchestrator import OrchestratorResult
 

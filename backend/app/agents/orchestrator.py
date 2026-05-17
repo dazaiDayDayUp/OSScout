@@ -1,26 +1,11 @@
-"""
-Orchestrator 协调器（并发版）
-
-职责：
-1. 接收 GitHub 仓库地址
-2. 通过 asyncio.gather 并发调度 4 个分析 Agent
-3. 汇总各维度结果，计算综合评分
-4. 输出结构化的尽调报告中间结果
-
-错误隔离：单个 Agent 失败不影响其他 Agent 执行，
-失败的维度输出降级结果（score=0，附带错误提示）。
-
-使用方式：
-    from app.agents.orchestrator import Orchestrator
-    orchestrator = Orchestrator()
-    result = await orchestrator.analyze("https://github.com/python-poetry/poetry")
-"""
+"""Orchestrator 协调器：并发调度 4 个分析 Agent，错误隔离"""
 
 import asyncio
 
 from pydantic import BaseModel
 
-from app.agents.community_agent import CommunityAgent, parse_repo_url
+from app.agents.community_agent import CommunityAgent
+from app.core.utils import parse_repo_url
 from app.agents.evolution_agent import EvolutionAgent
 from app.agents.quality_agent import QualityAgent
 from app.agents.security_agent import SecurityAgent

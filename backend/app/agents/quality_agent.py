@@ -1,19 +1,10 @@
-"""
-代码质量分析 Agent
-
-职责：
-1. 接收 GitHub 仓库地址
-2. 通过 filesystem-mcp 克隆仓库并检查文档
-3. 通过 code-analysis-mcp 运行 radon 和安全扫描
-4. 调用 scoring 模块计算评分
-5. 输出结构化的代码质量分析结果
-"""
+"""代码质量分析 Agent"""
 
 import asyncio
 
 from pydantic import BaseModel
 
-from app.agents.community_agent import parse_repo_url
+from app.core.utils import parse_repo_url
 from app.mcp.client import CodeAnalysisMCPClient, FilesystemMCPClient
 from app.scoring.quality import score_code_quality
 

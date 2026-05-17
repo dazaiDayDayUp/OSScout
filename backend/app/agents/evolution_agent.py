@@ -1,21 +1,8 @@
-"""
-技术演进分析 Agent
-
-职责：
-1. 接收 GitHub 仓库地址
-2. 调用 evolution_service 采集技术演进数据（releases、SBOM、最新版本）
-3. 调用 scoring 模块计算评分
-4. 输出结构化的技术演进分析结果
-
-使用方式：
-    from app.agents.evolution_agent import EvolutionAgent
-    agent = EvolutionAgent()
-    result = await agent.analyze("https://github.com/python-poetry/poetry")
-"""
+"""技术演进分析 Agent"""
 
 from pydantic import BaseModel
 
-from app.agents.community_agent import parse_repo_url
+from app.core.utils import parse_repo_url
 from app.scoring.evolution import score_evolution, EvolutionScoreResult
 from app.services.evolution_service import collect_evolution_data
 

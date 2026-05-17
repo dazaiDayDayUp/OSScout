@@ -1,18 +1,4 @@
-"""
-安全数据采集服务（MCP 版本）
-
-通过 OSVMCPClient 调用 osv-mcp Server，获取安全分析所需的全部数据：
-- 许可证信息
-- 依赖清单（SBOM）
-- OSV 漏洞查询结果
-
-osv-mcp Server 是安全数据采集中心，内部同时调用 GitHub API 和 OSV API，
-Security Agent 只需启动一个 MCP Client。
-
-使用方式：
-    from app.services.security_service import collect_security_data
-    data = await collect_security_data("python-poetry", "poetry")
-"""
+"""安全数据采集服务：通过 osv-mcp 获取许可证 + SBOM + OSV 漏洞"""
 
 from typing import Any
 

@@ -1,13 +1,4 @@
-"""
-GitHub 数据采集服务（MCP 版本）
-
-通过 GitHubMCPClient 调用 github-mcp Server，替代直接的 HTTP 请求。
-接口与 github_service.py 的 collect_all_metadata 保持一致，上层代码无需修改逻辑。
-
-与 github_service.py 的区别：
-- github_service.py：直接调用 GitHub API（含 Redis 缓存）
-- mcp_github_service.py：通过 MCP 协议调用 github-mcp Server（无缓存，Server 内有限频控制）
-"""
+"""GitHub 数据采集服务：通过 github-mcp Server 获取仓库元数据"""
 
 import asyncio
 from typing import Any

@@ -1,14 +1,4 @@
-"""
-社区健康度评分引擎
-
-将 GitHub 原始数据转换为 0-30 分的社区健康度评分。
-包含五项指标：Bus Factor / Issue 响应 / PR 合并率 / 活跃贡献者 / Release 稳定性。
-
-使用方式：
-    from app.scoring.community import score_community_health
-    result = score_community_health(raw_data)
-    print(result.total_score, result.findings)
-"""
+"""社区健康度评分引擎（0-30 分）：Bus Factor / Issue 响应 / PR 合并率 / 活跃贡献者 / Release 稳定性"""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone

@@ -1,17 +1,4 @@
-"""
-安全评分引擎
-
-根据 PROJECT_PLAN §7.3 的四项指标计算 0-25 分安全评分：
-- CVE 记录（10 分）
-- 依赖漏洞（8 分）
-- 许可证风险（5 分）
-- 安全响应速度（2 分）
-
-使用方式：
-    from app.scoring.security import score_security
-    result = score_security(raw_data)
-    print(result.total_score, result.findings)
-"""
+"""安全评分引擎（0-25 分）：CVE / 依赖漏洞 / 许可证 / 响应速度"""
 
 from dataclasses import dataclass, field
 from typing import Any

@@ -1,17 +1,4 @@
-"""
-技术演进评分引擎
-
-根据 PROJECT_PLAN §7.3 的四项指标计算 0-20 分技术演进评分：
-- 发布频率（6 分）
-- 技术栈更新（6 分）
-- Breaking Change（4 分）
-- 竞品对比（4 分，Phase 1 跳过）
-
-使用方式：
-    from app.scoring.evolution import score_evolution
-    result = score_evolution(raw_data)
-    print(result.total_score, result.findings)
-"""
+"""技术演进评分引擎（0-20 分）：发布频率 / 技术栈更新 / Breaking Change / 竞品对比"""
 
 from dataclasses import dataclass, field
 from typing import Any

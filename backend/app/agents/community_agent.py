@@ -1,24 +1,10 @@
-"""
-社区健康度分析 Agent
-
-职责：
-1. 接收 GitHub 仓库地址
-2. 调用 github_service 采集原始数据
-3. 调用 scoring 模块计算评分
-4. 输出结构化的社区健康度分析结果
-
-使用方式：
-    from app.agents.community_agent import CommunityAgent
-    agent = CommunityAgent()
-    result = await agent.analyze("https://github.com/python-poetry/poetry")
-"""
-
-from urllib.parse import urlparse
+"""社区健康度分析 Agent"""
 
 from pydantic import BaseModel
 
+from app.core.utils import parse_repo_url
 from app.scoring.community import score_community_health, CommunityScoreResult
-from app.services import mcp_github_service as github_service
+from app.services import github_service
 
 
 class CommunityAgentResult(BaseModel):
@@ -113,43 +99,3 @@ class CommunityAgent:
                 "url": repo_url,
             },
         )
-
-
-def parse_repo_url(repo_url: str) -> tuple[str, str]:
-    """
-    从 GitHub 仓库地址中解析 owner 和 repo 名称
-
-    支持的格式：
-        - https://github.com/owner/repo
-        - https://github.com/owner/repo.git
-        - github.com/owner/repo
-
-    Args:
-        repo_url: GitHub 仓库地址
-
-    Returns:
-        (owner, repo) 元组
-
-    Raises:
-        ValueError: URL 格式不合法
-    """
-    # 去掉 .git 后缀
-    url = repo_url.strip().removesuffix(".git")
-
-    # 如果没有协议头，补一个以便 urlparse 正确解析
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    parsed = urlparse(url)
-    path_parts = [p for p in parsed.path.split("/") if p]
-
-    if len(path_parts) < 2:
-        raise ValueError(
-            f"无效的 GitHub 仓库地址：{repo_url}\n"
-            "期望格式：https://github.com/owner/repo"
-        )
-
-    owner = path_parts[0]
-    repo = path_parts[1]
-
-    return owner, repo

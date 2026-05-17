@@ -76,6 +76,22 @@ python -m app.cli analyze https://github.com/python-poetry/poetry
 - 结构化日志 + 全局异常处理已接入
 - Docker Compose 一键启动开发环境
 
+## API 接口（Phase 2.1）
+
+```bash
+# 提交分析任务
+POST /api/v1/analyze -d '{"repo_url": "https://github.com/owner/repo"}'
+→ {"task_id": 1, "status": "running"}
+
+# 查询任务状态
+GET /api/v1/tasks/1
+→ {"task_id": 1, "status": "completed", "report_id": 2}
+
+# 获取尽调报告
+GET /api/v1/reports/2
+→ 完整报告 JSON（overall + 4 dimensions + findings）
+```
+
 ## 快速开始
 
 ### 1. 启动开发环境
@@ -142,7 +158,11 @@ osscout/
 │   │   ├── main.py           # FastAPI 入口
 │   │   ├── config.py         # 配置管理
 │   │   ├── cli.py            # CLI 入口
-│   │   ├── api/v1/           # REST 接口（Phase 2 接入）
+│   │   ├── api/v1/           # REST 接口
+│   │   │   ├── analyze.py    # POST /api/v1/analyze（Phase 2.1）
+│   │   │   ├── tasks.py      # GET /api/v1/tasks/{id}（Phase 2.1）
+│   │   │   ├── reports.py    # GET /api/v1/reports/{id}（Phase 2.1）
+│   │   │   └── __init__.py   # 路由聚合
 │   │   ├── core/             # 基础设施
 │   │   │   ├── models.py     # 数据库模型
 │   │   │   ├── database.py   # 异步数据库引擎
@@ -161,10 +181,10 @@ osscout/
 │   │   │   ├── security.py       # 安全评分（0-25）
 │   │   │   └── evolution.py      # 技术演进评分（0-20，Phase 1.5）
 │   │   ├── services/         # 业务逻辑
-│   │   │   ├── github_service_legacy.py
-│   │   │   ├── mcp_github_service.py
-│   │   │   ├── security_service.py
-│   │   │   └── evolution_service.py  # 技术演进数据采集（Phase 1.5）
+│   │   │   ├── analysis_service.py   # 分析任务生命周期（Phase 2.1）
+│   │   │   ├── github_service.py     # GitHub 数据采集（MCP 方式）
+│   │   │   ├── security_service.py   # 安全数据采集
+│   │   │   └── evolution_service.py  # 技术演进数据采集
 │   │   ├── mcp/              # MCP 客户端
 │   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis / OSV Client
 │   │   ├── rag/              # RAG 模块（Phase 3）
@@ -195,7 +215,10 @@ osscout/
 | Phase 1.3 | 代码质量 Agent | 已完成 |
 | Phase 1.4 | 安全分析 Agent（osv-mcp + 漏洞 + 许可证） | 已完成 |
 | Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度 | 已完成 |
-| Phase 2 | Web 平台 + 异步任务 + React 前端 | 待开始 |
+| Phase 2.1 | REST API + 数据库持久化 | 已完成 |
+| Phase 2.2 | Celery 异步任务队列 | 待开始 |
+| Phase 2.3 | 多项目对比 + 历史趋势 | 待开始 |
+| Phase 2.4-5 | React 前端 + 可视化 | 待开始 |
 | Phase 3 | Agent 智能化 + RAG | 待开始 |
 | Phase 4 | 持续监控 + 预警 | 待开始 |
 

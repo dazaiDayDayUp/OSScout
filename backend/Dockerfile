@@ -1,5 +1,5 @@
-# 使用官方 Python 3.12 镜像作为基础（通过国内镜像源拉取）
-FROM m.daocloud.io/docker.io/library/python:3.12-slim
+# 使用官方 Python 3.12 镜像作为基础
+FROM python:3.12-slim
 
 # 设置工作目录
 WORKDIR /app
