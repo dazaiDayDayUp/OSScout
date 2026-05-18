@@ -3,15 +3,21 @@
 使用 Pydantic Settings 从环境变量和 .env 文件读取配置
 """
 import os
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# .env 文件路径：基于本文件所在目录向上查找
+# 确保无论从哪里启动 Python，都能找到正确的 .env
+_CONFIG_DIR = Path(__file__).resolve().parent
+_ENV_FILE = _CONFIG_DIR.parent / ".env"
 
 
 class Settings(BaseSettings):
     """应用全局配置"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",  # 忽略未定义的环境变量，避免报错
     )
@@ -27,11 +33,20 @@ class Settings(BaseSettings):
     # === Redis ===
     redis_url: str = "redis://localhost:6379/0"
 
-    # === LLM ===
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
-    default_llm_provider: str = "anthropic"
-    default_llm_model: str = "claude-3-5-sonnet-20241022"
+    # === LLM（Kimi + DeepSeek）===
+    # Kimi (Moonshot AI) 配置
+    kimi_api_key: str = ""
+    kimi_base_url: str = "https://api.moonshot.cn/v1"
+    kimi_model: str = "moonshot-v1-8k"
+
+    # DeepSeek 配置
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-chat"
+
+    # 默认使用的 LLM Provider
+    default_llm_provider: str = "kimi"  # 可选: kimi / deepseek
+    default_llm_model: str = ""  # 为空时自动使用对应 provider 的默认模型
 
     # === GitHub ===
     github_token: str = ""  # 用于提高 API 限频

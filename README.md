@@ -34,6 +34,14 @@ python -m app.cli analyze https://github.com/python-poetry/poetry
 - 对比页：综合排名 + 堆叠对比图 + 关键差异高亮
 - 全局去 AI 味配色（低饱和度专业风）
 
+### Phase 3.1（LLM Client 封装）已完成
+
+- **Kimi Provider**（Moonshot AI）：`kimi-k2.6` 思考模型，兼容 OpenAI API 格式
+- **DeepSeek Provider**：`deepseek-v4-pro`，兼容 OpenAI API 格式
+- **统一抽象接口**：`chat()` 通用对话 + `chat_structured()` 结构化 JSON 输出
+- **Prompt 模板管理**：5 个预定义 Agent Prompt（社区/质量/安全/演进/综合）
+- **配置化切换**：通过 `DEFAULT_LLM_PROVIDER=kimi|deepseek` 切换，业务代码零修改
+
 ## 已验证的功能
 
 - **FastAPI 后端**：`http://localhost:8000/health` + 自动 API 文档 `/docs`
@@ -46,6 +54,7 @@ python -m app.cli analyze https://github.com/python-poetry/poetry
   - code-analysis-mcp：radon 圈复杂度 + AST 安全扫描
   - osv-mcp：SBOM 依赖提取 + OSV 漏洞查询 + 许可证检查
 - **Orchestrator**：`asyncio.gather` 并行运行 4 个 Agent，错误隔离
+- **LLM Provider**：Kimi (`kimi-k2.6`) + DeepSeek (`deepseek-v4-pro`) 双后端，统一抽象接口
 - **前端 React**：Vite 6 + React 19 + TailwindCSS v4 + shadcn/ui + Recharts
 - **完整链路**：浏览器提交 → API → Celery → 4 Agent 并行 → PostgreSQL → 前端展示
 
@@ -153,7 +162,13 @@ osscout/
 │   │   │   └── evolution_service.py
 │   │   ├── mcp/              # MCP 客户端
 │   │   │   └── client.py
-│   │   ├── rag/              # RAG 模块（Phase 3）
+│   │   ├── llm/              # LLM Provider 封装（Phase 3.1）
+│   │   │   ├── base.py
+│   │   │   ├── providers.py
+│   │   │   ├── factory.py
+│   │   │   ├── schemas.py
+│   │   │   └── templates.py
+│   │   ├── rag/              # RAG 模块（Phase 3.2）
 │   │   └── tasks/            # Celery 异步任务
 │   │       └── analysis_tasks.py
 │   ├── tests/
@@ -193,7 +208,8 @@ osscout/
 | Phase 2.2 | Celery 异步任务队列 | 已完成 |
 | Phase 2.3 | 多项目对比 + 历史趋势 | 已完成 |
 | Phase 2.4-2.5 | React 前端 + 可视化 | 已完成 |
-| Phase 3 | Agent 智能化 + RAG | 待开始 |
+| Phase 3.1 | LLM Client 封装（Kimi + DeepSeek） | 已完成 |
+| Phase 3.2-3.5 | ChromaDB + Agent LLM 推理 + ReAct + RAG 校准 + 综合报告 | 进行中 |
 | Phase 4 | 持续监控 + 预警 | 待开始 |
 
 ## 技术栈
@@ -203,7 +219,8 @@ osscout/
 - **任务队列**：Celery + Redis Broker
 - **Agent 编排**：手写 ReAct Loop（不用 LangChain）
 - **MCP 协议**：官方 Python SDK（`mcp`）
-- **LLM**：Claude / GPT（Phase 3 接入）
+- **LLM**：Kimi (`kimi-k2.6`) + DeepSeek (`deepseek-v4-pro`)
+- **RAG**：ChromaDB + sentence-transformers (`all-MiniLM-L6-v2`)
 - **前端**：React 19 + TypeScript 5.8 + TailwindCSS v4 + shadcn/ui + Recharts
 - **部署**：Docker Compose + Railway/Render
 

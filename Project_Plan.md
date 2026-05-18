@@ -646,20 +646,73 @@ Phase 2 拆分为 5 个小阶段递进执行：
 
 ### Phase 3：V2 — Agent 智能化 + RAG（Week 6-7）
 
-**目标**：引入 LLM 推理和知识库
+**目标**：引入 LLM 推理和知识库，让分析从"规则评分"升级为"数据驱动 + 推理增强"
 
-- [ ] LLM Client 封装（Claude + GPT 双后端）
-- [ ] 4 个分析 Agent 接入 LLM 推理
-- [ ] Orchestrator 升级为并行 + ReAct Loop
-- [ ] ChromaDB 向量库搭建
-- [ ] 评估方法论文档入库
-- [ ] 历史报告入库（脱敏）
-- [ ] RAG 校准模块实现
-- [ ] 综合报告 Agent（可解释性推理）
+Phase 3 拆分为 5 个小阶段递进执行：
+
+#### Phase 3.1：LLM Client 封装
+
+- [x] 抽象 LLM Provider 接口（统一封装 Kimi / DeepSeek 的调用差异）
+- [x] 实现 Kimi Provider（Moonshot AI，兼容 OpenAI API 格式）
+- [x] 实现 DeepSeek Provider（兼容 OpenAI API 格式）
+- [x] 配置化切换（通过环境变量 `DEFAULT_LLM_PROVIDER`）
+- [x] Prompt 模板基础设施（f-string 模板管理）
+- [x] 结构化输出接口（Prompt 工程 + JSON 解析 + Pydantic 校验）
+- [x] 验证：两个 Provider 均可正常调用
 
 **验收标准**：
+- [x] 同一套 Prompt 输入，Kimi 和 DeepSeek 都能返回格式一致的 JSON
+- [x] Provider 切换无需修改业务代码
+- [x] Kimi k2.6 思考模型自动修正 temperature=1.0（模型强制限制）
+
+#### Phase 3.2：ChromaDB 向量库 + 知识库文档入库
+
+- [ ] ChromaDB 本地部署（Python 嵌入式，无需额外服务）
+- [ ] Embedding 模型接入（`all-MiniLM-L6-v2`，本地推理）
+- [ ] 评估方法论文档分块入库（OpenSSF Scorecard 标准、CNCF 毕业标准等）
+- [ ] 失败案例库入库（left-pad、Faker.js、colors.js、event-stream 等）
+- [ ] 竞品映射文档入库（常见选型场景的竞品关系）
+- [ ] 向量检索封装（`rag/vector_store.py` + `rag/query.py`）
+
+**验收标准**：
+- 能执行语义检索："Bus Factor 低的风险" → 返回 left-pad 等失败案例
+- 检索 TOP-3 结果的相关性经人工抽查 >80%
+
+#### Phase 3.3：4 个分析 Agent 接入 LLM 推理
+
+- [ ] 社区健康 Agent：规则评分打底 + LLM 推理增强（判断"即将放弃维护"信号）
+- [ ] 代码质量 Agent：规则评分打底 + LLM 推理增强（判断文档质量、架构合理性）
+- [ ] 安全分析 Agent：规则评分打底 + LLM 推理增强（判断漏洞影响面、修复优先级）
+- [ ] 技术演进 Agent：规则评分打底 + LLM 推理增强（判断技术栈老化风险）
+- [ ] 每个 Agent 输出格式统一：评分 + findings（含 reasoning 字段）+ 风险标记
+
+**验收标准**：
+- Agent 输出包含 `reasoning` 字段，能解释评分的依据
+- 对比纯规则评分，LLM 增强后能发现规则无法捕捉的问题（如"虽然 PR 合并率 60%，但最近 3 个月核心维护者减少了 2 人"）
+
+#### Phase 3.4：Orchestrator 并行 ReAct Loop + RAG 校准
+
+- [ ] Orchestrator 重构：从串行执行升级为并行调度 4 个 Agent
+- [ ] 实现 ReAct Loop：Thought → Action → Observation → 下一轮 Thought
+- [ ] RAG 校准模块：每个 Agent 分析完成后，检索知识库进行基准对比
+- [ ] 冲突消解逻辑：当不同 Agent 结论矛盾时（如社区健康但安全漏洞多），由 Orchestrator 协调
+- [ ] 错误恢复：单个 Agent 失败时，其他 Agent 结果仍可汇总
+
+**验收标准**：
+- 4 个 Agent 并行执行，分析总时间缩短 30%+
+- RAG 校准输出包含"行业基准对比"和"历史案例引用"
+
+#### Phase 3.5：综合报告 Agent
+
+- [ ] 综合报告 Agent：接收 4 个 Agent 结果 + RAG 校准数据，生成最终报告
+- [ ] 报告结构优化：执行摘要 → 各维度详情 → 风险矩阵 → 竞品对比 → 明确建议
+- [ ] 可解释性增强：每个结论标注数据来源（规则评分 / LLM 推理 / RAG 引用）
+- [ ] 前端报告详情页升级：展示 reasoning 和 RAG 引用
+
+**Phase 3 总体验收标准**：
 - Agent 能给出超越规则的推理判断（如 "Bus Factor=2 是高风险，因为历史案例显示..."）
 - RAG 检索准确率 >80%
+- 报告可读性评分（人工抽查 10 份报告）> 4/5
 
 ### Phase 4：V3 — 持续监控 + 预警（Week 8-9）
 

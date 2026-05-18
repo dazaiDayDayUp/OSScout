@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-**Phase 2.5 完成，Phase 2（V1 — Web 平台 + 多项目）全部完成。**
+**Phase 3.1 完成，进入 Phase 3.2。**
 
 最近更新：2026-05-18
 
@@ -27,6 +27,7 @@
 | Phase 2.3 | 多项目对比 `/compare` + 历史趋势 `/history` + 报告列表分页 | ✅ |
 | Phase 2.4 | React 前端骨架（首页/报告列表/报告详情/路由） | ✅ |
 | Phase 2.5 | 前端可视化：ScoreGauge 环形仪表盘 + DimensionBarChart 条形图 + ComparePage 对比页 + 全局去 AI 味配色 | ✅ |
+| Phase 3.1 | LLM Client 封装（Kimi + DeepSeek 双后端，Prompt 模板，结构化输出） | ✅ |
 
 ---
 
@@ -91,7 +92,8 @@ cd frontend && npm run dev
 
 **Phase 3：V2 — Agent 智能化 + RAG**
 
-- LLM Client 封装（Claude + GPT 双后端）
-- 4 个分析 Agent 接入 LLM 推理
-- Orchestrator 升级为并行 + ReAct Loop
-- ChromaDB 向量库 + RAG 校准
+- ✅ Phase 3.1：LLM Client 封装（Kimi + DeepSeek 双后端）
+- Phase 3.2：ChromaDB 向量库 + 知识库文档入库
+- Phase 3.3：4 个分析 Agent 接入 LLM 推理
+- Phase 3.4：Orchestrator 并行 ReAct Loop + RAG 校准
+- Phase 3.5：综合报告 Agent（可解释性推理）
