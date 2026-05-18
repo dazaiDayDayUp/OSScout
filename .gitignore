@@ -59,5 +59,8 @@ tmp/
 *.log
 logs/
 
+# HuggingFace 模型缓存 + ChromaDB 向量数据（体积大，不纳入版本控制）
+.cache/
+
 # === claude ===
 .claude/

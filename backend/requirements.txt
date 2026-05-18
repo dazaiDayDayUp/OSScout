@@ -34,5 +34,5 @@ celery[redis]>=5.4.0
 
 # Phase 3: LLM + RAG
 openai>=1.60.0
-# chromadb>=0.6.0
-# sentence-transformers>=3.0.0
+chromadb>=0.6.0
+sentence-transformers>=3.0.0
