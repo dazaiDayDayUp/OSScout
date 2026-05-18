@@ -30,7 +30,7 @@ radon>=6.0.0
 mcp>=1.0.0
 
 # Phase 2: 任务队列
-# celery[redis]>=5.4.0
+celery[redis]>=5.4.0
 
 # Phase 3: LLM + RAG
 # anthropic>=0.40.0

@@ -76,10 +76,10 @@ python -m app.cli analyze https://github.com/python-poetry/poetry
 - 结构化日志 + 全局异常处理已接入
 - Docker Compose 一键启动开发环境
 
-## API 接口（Phase 2.1）
+## API 接口（Phase 2.1 + 2.2）
 
 ```bash
-# 提交分析任务
+# 提交分析任务（立即返回，后台 Celery 执行）
 POST /api/v1/analyze -d '{"repo_url": "https://github.com/owner/repo"}'
 → {"task_id": 1, "status": "running"}
 
@@ -90,6 +90,14 @@ GET /api/v1/tasks/1
 # 获取尽调报告
 GET /api/v1/reports/2
 → 完整报告 JSON（overall + 4 dimensions + findings）
+```
+
+**启动 Celery Worker（宿主机开发模式）**：
+
+```bash
+cd backend
+export DATABASE_URL="postgresql+asyncpg://osscout:osscout@localhost:5432/osscout"
+venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info -P solo
 ```
 
 ## 快速开始
@@ -167,6 +175,7 @@ osscout/
 │   │   │   ├── models.py     # 数据库模型
 │   │   │   ├── database.py   # 异步数据库引擎
 │   │   │   ├── cache.py      # Redis 缓存（含降级容错）
+│   │   │   ├── celery_app.py # Celery 应用配置（Phase 2.2）
 │   │   │   └── logger.py     # 结构化日志
 │   │   ├── agents/           # Agent 层
 │   │   │   ├── orchestrator.py   # 协调器（asyncio.gather 并发调度 4 个 Agent）
@@ -188,7 +197,8 @@ osscout/
 │   │   ├── mcp/              # MCP 客户端
 │   │   │   └── client.py         # GitHub / Filesystem / CodeAnalysis / OSV Client
 │   │   ├── rag/              # RAG 模块（Phase 3）
-│   │   └── tasks/            # Celery 任务（Phase 2）
+│   │   └── tasks/            # Celery 异步任务（Phase 2.2）
+│   │       └── analysis_tasks.py  # run_due_diligence 任务
 │   ├── tests/
 │   └── alembic/              # 数据库迁移
 │
@@ -216,7 +226,7 @@ osscout/
 | Phase 1.4 | 安全分析 Agent（osv-mcp + 漏洞 + 许可证） | 已完成 |
 | Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度 | 已完成 |
 | Phase 2.1 | REST API + 数据库持久化 | 已完成 |
-| Phase 2.2 | Celery 异步任务队列 | 待开始 |
+| Phase 2.2 | Celery 异步任务队列 | 已完成 |
 | Phase 2.3 | 多项目对比 + 历史趋势 | 待开始 |
 | Phase 2.4-5 | React 前端 + 可视化 | 待开始 |
 | Phase 3 | Agent 智能化 + RAG | 待开始 |
