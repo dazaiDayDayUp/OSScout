@@ -174,6 +174,30 @@ async def get_report(
     dimensions_raw = raw.get("dimensions", {})
     repo_raw = raw.get("repo", {})
 
+    # 从数据库 Repository 表补充仓库元信息（比 raw_results 更完整）
+    db_repo = report.repository
+    if db_repo:
+        repo_info = {
+            "owner": db_repo.owner,
+            "name": db_repo.repo,
+            "url": db_repo.url,
+            "description": db_repo.description,
+            "primary_language": db_repo.primary_language,
+            "star_count": db_repo.star_count,
+            "fork_count": db_repo.fork_count,
+        }
+    else:
+        # fallback：从 raw_results 中的 repo 字段构造
+        repo_info = {
+            "owner": repo_raw.get("owner", ""),
+            "name": repo_raw.get("repo", ""),
+            "url": repo_raw.get("url", ""),
+            "description": None,
+            "primary_language": None,
+            "star_count": None,
+            "fork_count": None,
+        }
+
     # 构造 dimensions 响应结构
     dimensions = {}
     for dim_name, dim_data in dimensions_raw.items():
@@ -198,7 +222,7 @@ async def get_report(
     return ReportResponse(
         report_id=report.id,
         task_id=report.task_id,
-        repo=repo_raw,
+        repo=repo_info,
         overall=overall,
         dimensions=dimensions,
         key_findings=report.key_findings or [],

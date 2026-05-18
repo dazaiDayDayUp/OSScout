@@ -20,11 +20,11 @@
   --color-primary-800: #1e40af;
   --color-primary-900: #1e3a8a;
 
-  /* 评分颜色 */
-  --color-grade-a: #22c55e;
-  --color-grade-b: #84cc16;
-  --color-grade-c: #eab308;
-  --color-grade-d: #ef4444;
+  /* 评分颜色 — 低饱和度专业风，去 AI 味 */
+  --color-grade-a: #059669;   /* 青绿，沉稳 */
+  --color-grade-b: #ca8a04;   /* 土黄，温和 */
+  --color-grade-c: #ea580c;   /* 暖橙，提醒 */
+  --color-grade-d: #b91c1c;   /* 砖红，警示 */
 }
 
 /* 全局基础样式 */

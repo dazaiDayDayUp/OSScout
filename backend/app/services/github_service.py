@@ -1,9 +1,12 @@
 """GitHub 数据采集服务：通过 github-mcp Server 获取仓库元数据"""
 
 import asyncio
+import logging
 from typing import Any
 
 from app.mcp.client import GitHubMCPClient
+
+logger = logging.getLogger(__name__)
 
 
 async def collect_all_metadata(owner: str, repo: str) -> dict[str, Any]:
@@ -31,11 +34,13 @@ async def collect_all_metadata(owner: str, repo: str) -> dict[str, Any]:
             return_exceptions=True,
         )
 
-    return {
-        "metadata": results[0] if not isinstance(results[0], Exception) else {},
-        "contributors": results[1] if not isinstance(results[1], Exception) else [],
-        "issues": results[2] if not isinstance(results[2], Exception) else [],
-        "pull_requests": results[3] if not isinstance(results[3], Exception) else [],
-        "releases": results[4] if not isinstance(results[4], Exception) else [],
-        "commit_activity": results[5] if not isinstance(results[5], Exception) else [],
-    }
+    # 构建结果，异常项记录日志（避免静默失败）
+    names = ["metadata", "contributors", "issues", "pull_requests", "releases", "commit_activity"]
+    data = {}
+    for i, name in enumerate(names):
+        if isinstance(results[i], Exception):
+            logger.warning("github-mcp %s 采集失败: %s", name, results[i])
+            data[name] = {} if name == "metadata" else []
+        else:
+            data[name] = results[i]
+    return data

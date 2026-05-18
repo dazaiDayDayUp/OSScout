@@ -114,7 +114,9 @@ export function useRepoHistory(repoId: number | null) {
 export function useCompareRepositories() {
   return useMutation({
     mutationFn: async (data: CompareRequest): Promise<CompareResponse> => {
-      const res = await client.post('/compare', data)
+      // 对比接口是同步等待多个 Celery 任务完成的，耗时较长
+      // 2 个仓库约 60-90 秒，3 个仓库约 90-120 秒，将超时设为 120 秒
+      const res = await client.post('/compare', data, { timeout: 120000 })
       return res.data
     },
   })

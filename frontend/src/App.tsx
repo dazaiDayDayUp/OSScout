@@ -11,6 +11,7 @@ import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import ReportPage from './pages/ReportPage'
 import ReportListPage from './pages/ReportListPage'
+import ComparePage from './pages/ComparePage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/reports" element={<ReportListPage />} />
             <Route path="/reports/:id" element={<ReportPage />} />
+            <Route path="/compare" element={<ComparePage />} />
           </Routes>
         </Layout>
       </BrowserRouter>

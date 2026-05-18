@@ -1,7 +1,8 @@
 /**
  * 报告详情页
  *
- * 展示单个尽调报告的完整内容：综合评分、各维度详情、关键发现、建议。
+ * 展示单个尽调报告的完整内容：综合评分仪表盘、各维度条形图、关键发现、建议。
+ * 采用卡片式布局，信息密度高，配色克制专业。
  */
 
 import { useParams } from 'react-router-dom'
@@ -12,9 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import ScoreGauge from '@/components/ScoreGauge'
+import ScoreBadge from '@/components/ScoreBadge'
+import DimensionBarChart from '@/components/DimensionBarChart'
 import {
   FileText,
   AlertCircle,
@@ -22,20 +25,11 @@ import {
   Code2,
   Shield,
   TrendingUp,
-  Star,
-  GitFork,
-  Calendar,
+  Lightbulb,
+  CheckCircle2,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react'
-
-/** 评级对应的颜色 */
-const RATING_COLORS: Record<string, string> = {
-  'A+': 'bg-green-100 text-green-800',
-  'A': 'bg-green-100 text-green-800',
-  'B+': 'bg-lime-100 text-lime-800',
-  'B': 'bg-yellow-100 text-yellow-800',
-  'C': 'bg-orange-100 text-orange-800',
-  'D': 'bg-red-100 text-red-800',
-}
 
 /** 维度配置 */
 const DIMENSION_CONFIG: Record<string, { label: string; icon: typeof Users; max: number }> = {
@@ -45,21 +39,27 @@ const DIMENSION_CONFIG: Record<string, { label: string; icon: typeof Users; max:
   evolution: { label: '技术演进', icon: TrendingUp, max: 20 },
 }
 
+/** 维度配色 — 用于卡片边框和图标 */
+const DIMENSION_ACCENT: Record<string, string> = {
+  community: 'border-l-teal-500',
+  quality: 'border-l-blue-500',
+  security: 'border-l-slate-500',
+  evolution: 'border-l-amber-500',
+}
+
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>()
   const reportId = id ? parseInt(id, 10) : null
 
   const { data: report, isLoading, isError, error } = useReport(reportId)
 
-  // 加载中状态
   if (isLoading) {
     return <ReportSkeleton />
   }
 
-  // 错误状态
   if (isError || !report) {
     return (
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -72,118 +72,183 @@ export default function ReportPage() {
 
   const { overall, dimensions, repo, key_findings, recommendations } = report
 
+  // 构建条形图数据
+  const barChartData = Object.entries(DIMENSION_CONFIG).map(([key, config]) => {
+    const dim = dimensions[key]
+    return {
+      name: config.label,
+      key,
+      score: dim?.score ?? 0,
+      max: config.max,
+      percentage: dim?.percentage ?? 0,
+    }
+  })
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-6">
+      {/* 页面标题区 */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
             {repo.name || '未知仓库'}
           </h1>
-          <p className="text-sm text-gray-500">
+          <a
+            href={repo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          >
             {repo.owner}/{repo.name}
-          </p>
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
-        <Badge className={RATING_COLORS[overall.rating] || 'bg-gray-100 text-gray-800'}>
-          {overall.rating}
-        </Badge>
+        <ScoreBadge rating={overall.rating} />
       </div>
 
-      {/* 综合评分卡片 */}
+      {/* 综合评分区 — 仪表盘 + 元信息 */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {/* 环形图 */}
+        <Card className="md:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-gray-600">
+              <FileText className="h-4 w-4" />
+              综合评分
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center py-4">
+            <ScoreGauge
+              score={overall.score}
+              maxScore={overall.max_score}
+              rating={overall.rating}
+              size={140}
+              strokeWidth={10}
+            />
+            <div className="mt-3 text-center">
+              <span className="text-sm text-gray-500">
+                得分率 {Math.round(overall.percentage)}%
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 仓库元信息 */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              仓库概览
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {repo.star_count !== undefined && (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-400">Stars</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">
+                    {repo.star_count.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {repo.fork_count !== undefined && (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-400">Forks</p>
+                  <p className="text-lg font-semibold tabular-nums text-gray-900">
+                    {repo.fork_count.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {repo.primary_language && (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-400">主要语言</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {repo.primary_language}
+                  </p>
+                </div>
+              )}
+              {report.created_at && (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-400">分析时间</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {new Date(report.created_at).toLocaleDateString('zh-CN')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {repo.description && (
+              <p className="mt-4 text-sm text-gray-600 leading-relaxed">
+                {repo.description}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 各维度评分条形图 */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            综合评分
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <TrendingUp className="h-4 w-4 text-gray-500" />
+            维度评分对比
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-end gap-2">
-            <span className="text-5xl font-bold text-gray-900">
-              {overall.score}
-            </span>
-            <span className="mb-1.5 text-lg text-gray-400">
-              / {overall.max_score}
-            </span>
-            <span className="mb-1.5 ml-2 text-sm text-gray-500">
-              ({Math.round(overall.percentage)}%)
-            </span>
-          </div>
-
-          {/* 仓库元信息 */}
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
-            {repo.star_count !== undefined && (
-              <span className="flex items-center gap-1">
-                <Star className="h-4 w-4" /> {repo.star_count.toLocaleString()}
-              </span>
-            )}
-            {repo.fork_count !== undefined && (
-              <span className="flex items-center gap-1">
-                <GitFork className="h-4 w-4" /> {repo.fork_count.toLocaleString()}
-              </span>
-            )}
-            {repo.primary_language && (
-              <span className="rounded bg-gray-100 px-2 py-0.5">
-                {repo.primary_language}
-              </span>
-            )}
-            {report.created_at && (
-              <span className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                {new Date(report.created_at).toLocaleDateString('zh-CN')}
-              </span>
-            )}
-          </div>
+          <DimensionBarChart data={barChartData} height={220} />
         </CardContent>
       </Card>
 
-      {/* 各维度评分 */}
+      {/* 各维度详情卡片 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {Object.entries(DIMENSION_CONFIG).map(([key, config]) => {
           const dim = dimensions[key]
           if (!dim) return null
           const Icon = config.icon
+          const accentClass = DIMENSION_ACCENT[key] || 'border-l-gray-300'
           return (
-            <Card key={key}>
+            <Card key={key} className={`border-l-4 ${accentClass}`}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Icon className="h-5 w-5 text-primary-500" />
+                  <Icon className="h-4 w-4 text-gray-500" />
                   {config.label}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* 分数 */}
-                <div className="flex items-end gap-1">
-                  <span className="text-3xl font-bold">{dim.score}</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold tabular-nums">{dim.score}</span>
                   <span className="text-sm text-gray-400">/ {config.max}</span>
+                  <span className="ml-auto text-sm font-medium text-gray-500">
+                    {Math.round(dim.percentage)}%
+                  </span>
                 </div>
 
                 {/* 进度条 */}
-                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                   <div
-                    className="h-full rounded-full bg-primary-500 transition-all"
+                    className="h-full rounded-full bg-gray-800 transition-all"
                     style={{ width: `${dim.percentage}%` }}
                   />
                 </div>
 
                 {/* 关键发现 */}
                 {dim.findings.length > 0 && (
-                  <ul className="space-y-1">
+                  <div className="space-y-1.5 pt-1">
                     {dim.findings.map((finding, i) => (
-                      <li key={i} className="text-sm text-gray-600">
-                        • {finding}
-                      </li>
+                      <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <span>{finding}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
 
                 {/* 风险 */}
                 {dim.risks.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {dim.risks.map((risk, i) => (
-                      <p key={i} className="text-sm text-orange-600">
-                        ⚠ {risk}
-                      </p>
+                      <div key={i} className="flex items-start gap-2 text-sm text-amber-700">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <span>{risk}</span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -197,14 +262,19 @@ export default function ReportPage() {
       {key_findings.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>关键发现</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <Lightbulb className="h-4 w-4 text-gray-500" />
+              关键发现
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {key_findings.map((finding, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-0.5 text-primary-500">•</span>
-                  {finding}
+                <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500">
+                    {i + 1}
+                  </span>
+                  <span className="leading-relaxed">{finding}</span>
                 </li>
               ))}
             </ul>
@@ -216,14 +286,19 @@ export default function ReportPage() {
       {recommendations.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>建议</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <CheckCircle2 className="h-4 w-4 text-gray-500" />
+              评估建议
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {recommendations.map((rec, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-0.5 text-green-500">✓</span>
-                  {rec}
+                <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-50 text-xs font-medium text-teal-600">
+                    {i + 1}
+                  </span>
+                  <span className="leading-relaxed">{rec}</span>
                 </li>
               ))}
             </ul>
@@ -237,18 +312,22 @@ export default function ReportPage() {
 /** 报告加载骨架屏 */
 function ReportSkeleton() {
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex items-start justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-32" />
         </div>
-        <Skeleton className="h-6 w-12" />
+        <Skeleton className="h-7 w-12" />
       </div>
-      <Skeleton className="h-32 w-full" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Skeleton className="h-[260px]" />
+        <Skeleton className="h-[260px] md:col-span-2" />
+      </div>
+      <Skeleton className="h-[280px]" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-48 w-full" />
+          <Skeleton key={i} className="h-56" />
         ))}
       </div>
     </div>

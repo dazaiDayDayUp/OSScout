@@ -2,6 +2,8 @@
 应用配置管理
 使用 Pydantic Settings 从环境变量和 .env 文件读取配置
 """
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,3 +42,8 @@ class Settings(BaseSettings):
 
 # 全局配置实例，按需导入使用
 settings = Settings()
+
+# 将关键 Token 同步到 os.environ，供 MCP Server 子进程继承
+# MCP Server 通过 stdio 启动，env={**os.environ} 复制父进程环境变量
+if settings.github_token:
+    os.environ["GITHUB_TOKEN"] = settings.github_token

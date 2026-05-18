@@ -2,6 +2,7 @@
  * 报告列表页
  *
  * 分页展示所有历史尽调报告，点击可跳转到报告详情。
+ * 列表中展示迷你评分条，让评分一目了然。
  */
 
 import { useState } from 'react'
@@ -13,9 +14,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import ScoreBadge from '@/components/ScoreBadge'
+import MiniScoreBar from '@/components/MiniScoreBar'
 import {
   Table,
   TableBody,
@@ -26,16 +28,6 @@ import {
 } from '@/components/ui/table'
 import { FileText, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 
-/** 评级对应的颜色 */
-const RATING_COLORS: Record<string, string> = {
-  'A+': 'bg-green-100 text-green-800',
-  'A': 'bg-green-100 text-green-800',
-  'B+': 'bg-lime-100 text-lime-800',
-  'B': 'bg-yellow-100 text-yellow-800',
-  'C': 'bg-orange-100 text-orange-800',
-  'D': 'bg-red-100 text-red-800',
-}
-
 export default function ReportListPage() {
   const [page, setPage] = useState(1)
   const pageSize = 20
@@ -45,7 +37,9 @@ export default function ReportListPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">报告列表</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          报告列表
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
           查看所有历史尽调分析报告
         </p>
@@ -82,9 +76,9 @@ export default function ReportListPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>仓库</TableHead>
-                    <TableHead>评分</TableHead>
-                    <TableHead>评级</TableHead>
-                    <TableHead>分析时间</TableHead>
+                    <TableHead className="w-32">评分</TableHead>
+                    <TableHead className="w-20">评级</TableHead>
+                    <TableHead className="w-32">分析时间</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -93,7 +87,7 @@ export default function ReportListPage() {
                       <TableCell>
                         <Link
                           to={`/reports/${item.report_id}`}
-                          className="font-medium text-primary-600 hover:underline"
+                          className="font-medium text-gray-900 hover:text-primary-600 hover:underline"
                         >
                           {item.repo_owner}/{item.repo_name}
                         </Link>
@@ -101,18 +95,15 @@ export default function ReportListPage() {
                           {item.repo_url}
                         </p>
                       </TableCell>
-                      <TableCell className="font-mono text-lg font-semibold">
-                        {item.overall_score}
+                      <TableCell>
+                        <MiniScoreBar
+                          score={item.overall_score}
+                          maxScore={100}
+                          rating={item.overall_rating}
+                        />
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          className={
-                            RATING_COLORS[item.overall_rating] ||
-                            'bg-gray-100 text-gray-800'
-                          }
-                        >
-                          {item.overall_rating}
-                        </Badge>
+                        <ScoreBadge rating={item.overall_rating} />
                       </TableCell>
                       <TableCell className="text-sm text-gray-500">
                         {item.created_at
@@ -128,7 +119,7 @@ export default function ReportListPage() {
               {data.pagination.total_pages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-sm text-gray-500">
-                    共 {data.pagination.total} 条，第 {page} /{' '}
+                    共 {data.pagination.total} 条，第 {page} /
                     {data.pagination.total_pages} 页
                   </span>
                   <div className="flex gap-2">

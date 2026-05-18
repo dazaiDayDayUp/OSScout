@@ -72,6 +72,9 @@ async def _github_get(path: str, extra_headers: dict | None = None) -> dict | li
             response = await client.get(url)
             if response.status_code == 404:
                 return {}
+            # 对超大仓库（如 facebook/react）SBOM API 可能返回 500，优雅降级
+            if response.status_code >= 500:
+                return {}
             response.raise_for_status()
             return response.json()
 

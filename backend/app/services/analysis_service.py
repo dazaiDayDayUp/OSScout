@@ -132,9 +132,11 @@ class AnalysisService:
         return result.scalar_one_or_none()
 
     async def get_report(self, report_id: int) -> DueDiligenceReport | None:
-        """根据 ID 获取尽调报告"""
+        """根据 ID 获取尽调报告（预加载 repository 关联）"""
         result = await self.session.execute(
-            select(DueDiligenceReport).where(DueDiligenceReport.id == report_id),
+            select(DueDiligenceReport)
+            .where(DueDiligenceReport.id == report_id)
+            .options(selectinload(DueDiligenceReport.repository)),
         )
         return result.scalar_one_or_none()
 
