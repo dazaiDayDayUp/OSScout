@@ -1,8 +1,10 @@
-"""GET /api/v1/reports/{report_id} — 获取尽调报告"""
+"""GET /api/v1/reports/{report_id} — 获取尽调报告
+GET /api/v1/reports — 报告列表查询（分页）
+"""
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,9 +43,101 @@ class ReportResponse(BaseModel):
     created_at: datetime | None = Field(None, description="报告生成时间")
 
 
+class ReportListItem(BaseModel):
+    """报告列表单项摘要"""
+
+    report_id: int = Field(..., description="报告唯一标识")
+    task_id: int = Field(..., description="关联的任务 ID")
+    repo_owner: str = Field(..., description="仓库所有者")
+    repo_name: str = Field(..., description="仓库名称")
+    repo_url: str = Field(..., description="仓库地址")
+    overall_score: int = Field(..., description="综合得分")
+    overall_rating: str = Field(..., description="评级")
+    created_at: datetime | None = Field(None, description="报告生成时间")
+
+
+class PaginationMeta(BaseModel):
+    """分页元信息"""
+
+    total: int = Field(..., description="总条数")
+    page: int = Field(..., description="当前页码")
+    page_size: int = Field(..., description="每页条数")
+    total_pages: int = Field(..., description="总页数")
+
+
+class ReportListResponse(BaseModel):
+    """报告列表响应体"""
+
+    items: list[ReportListItem] = Field(default_factory=list, description="报告列表")
+    pagination: PaginationMeta = Field(..., description="分页信息")
+
+
 # ═══════════════════════════════════════════════════════════════
 # 接口实现
 # ═══════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "",
+    response_model=ReportListResponse,
+    summary="报告列表查询",
+    description="分页查询尽调报告列表，支持按仓库过滤。返回报告摘要信息，不含详细维度数据。",
+)
+async def list_reports(
+    page: int = Query(1, ge=1, description="页码（从 1 开始）"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数（最大 100）"),
+    repo_id: int | None = Query(None, description="按仓库 ID 过滤"),
+    session: AsyncSession = Depends(get_db),
+) -> ReportListResponse:
+    """
+    分页查询尽调报告列表
+
+    Args:
+        page: 页码
+        page_size: 每页条数
+        repo_id: 仓库 ID 过滤条件
+        session: 数据库会话
+
+    Returns:
+        ReportListResponse: 报告列表 + 分页信息
+    """
+    service = AnalysisService(session)
+    reports, total = await service.list_reports(
+        page=page,
+        page_size=page_size,
+        repo_id=repo_id,
+    )
+
+    # 构造列表项
+    items = []
+    for report in reports:
+        # 从关联的 repository 获取仓库信息
+        repo = report.repository
+        items.append(
+            ReportListItem(
+                report_id=report.id,
+                task_id=report.task_id,
+                repo_owner=repo.owner if repo else "unknown",
+                repo_name=repo.repo if repo else "unknown",
+                repo_url=repo.url if repo else "",
+                overall_score=report.overall_score,
+                overall_rating=report.overall_rating,
+                created_at=report.created_at,
+            )
+        )
+
+    # 计算总页数
+    total_pages = (total + page_size - 1) // page_size
+
+    return ReportListResponse(
+        items=items,
+        pagination=PaginationMeta(
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+        ),
+    )
 
 
 @router.get(

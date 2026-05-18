@@ -11,10 +11,29 @@ Celery 异步任务定义
 import asyncio
 from datetime import datetime
 
-from app.core.celery_app import celery_app
-from app.core.database import AsyncSessionLocal
-from app.core.models import AnalysisTask, DueDiligenceReport, TaskStatus
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
 from app.agents.orchestrator import Orchestrator
+from app.config import settings
+from app.core.celery_app import celery_app
+from app.core.models import AnalysisTask, DueDiligenceReport, TaskStatus
+
+
+def _create_session():
+    """
+    创建独立的数据库会话
+
+    每个 Celery 任务使用独立的 engine + session，
+    NullPool 禁用连接池，避免跨事件循环复用 asyncpg 连接。
+    """
+    engine = create_async_engine(
+        settings.database_url,
+        poolclass=NullPool,
+        echo=False,
+    )
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+    return SessionLocal
 
 
 def _calculate_rating(percentage: float) -> str:
@@ -55,7 +74,8 @@ async def _async_run_analysis(
     流程与 analysis_service.AnalysisService._run_analysis 一致：
     调 Orchestrator → 计算评级 → 生成报告 → 更新任务状态。
     """
-    async with AsyncSessionLocal() as session:
+    SessionLocal = _create_session()
+    async with SessionLocal() as session:
         # 执行 Orchestrator 分析
         orchestrator = Orchestrator()
         result = await orchestrator.analyze(repo_url)
@@ -99,7 +119,8 @@ async def _async_run_analysis(
 
 async def _async_mark_failed(task_id: int, error_msg: str) -> None:
     """异步标记任务失败"""
-    async with AsyncSessionLocal() as session:
+    SessionLocal = _create_session()
+    async with SessionLocal() as session:
         task = await session.get(AnalysisTask, task_id)
         if task:
             task.status = TaskStatus.FAILED

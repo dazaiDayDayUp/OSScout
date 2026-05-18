@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-**Phase 2.2 完成，即将进入 Phase 2.3。**
+**Phase 2.3 完成，即将进入 Phase 2.4。**
 
 最近更新：2026-05-18
 
@@ -24,6 +24,17 @@
 | Phase 1.5 | 技术演进 Agent + Orchestrator 并发调度（四维度 100 分） | ✅ |
 | Phase 2.1 | REST API + 数据库持久化 | ✅ |
 | Phase 2.2 | Celery 异步任务队列（Redis Broker + Worker） | ✅ |
+| Phase 2.3 | 多项目对比 + 历史趋势 + 报告列表分页 | ✅ |
+
+---
+
+## Phase 2.3 新增接口
+
+| 接口 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/reports` | GET | 报告列表查询（分页，支持 repo_id 过滤） |
+| `/api/v1/repos/{id}/history` | GET | 仓库历史趋势（5 维度时序数据） |
+| `/api/v1/compare` | POST | 多仓库对比分析（2-5 个仓库） |
 
 ---
 
@@ -51,6 +62,8 @@ venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info 
 |------|---------|
 | greenlet 3.5.0 DLL 加载失败（Windows） | 降级到 `greenlet==3.1.1` |
 | Windows 控制台 GBK 编码 | 避免 Unicode 特殊字符，用 `--output` 导出文件 |
+| Celery Worker asyncpg 并发错误 | 每个任务独立创建 engine + NullPool（见 `analysis_tasks.py`） |
+| SQLAlchemy session 缓存导致轮询 stale | 轮询前 `await session.rollback()` 清除缓存 |
 
 ---
 
@@ -66,8 +79,9 @@ venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info 
 
 ## 下一步
 
-**Phase 2.3：多项目对比 + 历史趋势接口**
+**Phase 2.4：React 前端骨架**
 
-- `POST /api/v1/compare` — 批量提交多个仓库，返回对比报告
-- `GET /api/v1/repos/{id}/history` — 某仓库历次分析的指标趋势
-- 报告列表查询（分页）
+- HTTP 客户端封装（api/client.ts）
+- 首页：提交分析表单（输入 repo_url）
+- 报告详情页：文本版报告展示
+- 路由配置（React Router）

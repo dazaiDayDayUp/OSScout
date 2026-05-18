@@ -9,7 +9,7 @@ v1 API 路由聚合
 
 from fastapi import APIRouter
 
-from app.api.v1 import analyze, reports, tasks
+from app.api.v1 import analyze, compare, reports, repos, tasks
 
 # 创建 v1 版本的主路由实例
 api_router = APIRouter()
@@ -23,3 +23,9 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["任务状态"])
 
 # reports 模块：获取尽调报告
 api_router.include_router(reports.router, prefix="/reports", tags=["尽调报告"])
+
+# repos 模块：仓库历史趋势
+api_router.include_router(repos.router, prefix="/repos", tags=["仓库信息"])
+
+# compare 模块：多仓库对比
+api_router.include_router(compare.router, prefix="/compare", tags=["对比分析"])
