@@ -593,10 +593,10 @@ Phase 2 拆分为 5 个小阶段递进执行：
 
 #### Phase 2.2：Celery 异步任务队列
 
-- [ ] Celery 应用配置（Redis broker）
-- [ ] `run_due_diligence` 异步任务
-- [ ] `/api/v1/analyze` 改为"提交 Celery 任务 + 立即返回 task_id"
-- [ ] docker-compose.dev.yml 启用 worker 服务
+- [x] Celery 应用配置（Redis broker）
+- [x] `run_due_diligence` 异步任务
+- [x] `/api/v1/analyze` 改为"提交 Celery 任务 + 立即返回 task_id"
+- [ ] docker-compose.dev.yml 启用 worker 服务（Phase 5 统一配置）
 
 **验收标准**：
 - 提交任务后立即返回，不阻塞 HTTP 响应
@@ -605,9 +605,9 @@ Phase 2 拆分为 5 个小阶段递进执行：
 
 #### Phase 2.3：多项目对比 + 历史趋势接口
 
-- [ ] `POST /api/v1/compare` — 批量提交多个仓库，返回对比报告
-- [ ] `GET /api/v1/repos/{id}/history` — 某仓库历次分析的指标趋势
-- [ ] 报告列表查询（分页）
+- [x] `POST /api/v1/compare` — 批量提交多个仓库，返回对比报告
+- [x] `GET /api/v1/repos/{id}/history` — 某仓库历次分析的指标趋势
+- [x] 报告列表查询（分页）
 
 **验收标准**：
 - 支持同时对比 2-3 个仓库
@@ -615,10 +615,14 @@ Phase 2 拆分为 5 个小阶段递进执行：
 
 #### Phase 2.4：React 前端骨架
 
-- [ ] HTTP 客户端封装（api/client.ts）
-- [ ] 首页：提交分析表单（输入 repo_url）
-- [ ] 报告详情页：文本版报告展示
-- [ ] 路由配置（React Router）
+- [x] HTTP 客户端封装（Axios + TanStack Query）
+- [x] 首页：提交分析表单 + 任务状态轮询
+- [x] 报告详情页：四维评分展示
+- [x] 报告列表页：分页表格
+- [x] 路由配置（React Router v7）
+- [x] Vite dev server 代理配置（解决 CORS）
+
+**技术栈**：Vite 6 + React 19 + TypeScript 5.8 + TailwindCSS v4 + shadcn/ui + React Router v7 + TanStack Query v5
 
 **验收标准**：
 - 浏览器可提交分析、查看报告

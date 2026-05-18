@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-**Phase 2.3 完成，即将进入 Phase 2.4。**
+**Phase 2.4 完成，即将进入 Phase 2.5。**
 
 最近更新：2026-05-18
 
@@ -25,8 +25,22 @@
 | Phase 2.1 | REST API + 数据库持久化 | ✅ |
 | Phase 2.2 | Celery 异步任务队列（Redis Broker + Worker） | ✅ |
 | Phase 2.3 | 多项目对比 + 历史趋势 + 报告列表分页 | ✅ |
+| Phase 2.4 | React 前端骨架（首页/报告列表/报告详情/路由） | ✅ |
 
 ---
+
+## Phase 2.4 前端技术栈
+
+| 层级 | 选型 | 版本 |
+|------|------|------|
+| 构建工具 | Vite | 6.x |
+| UI 框架 | React | 19 |
+| 语言 | TypeScript | 5.8 |
+| 路由 | React Router | v7 |
+| HTTP | Axios + TanStack Query | v5 |
+| 样式 | TailwindCSS | v4 |
+| 组件库 | shadcn/ui | latest |
+| 图表 | Recharts | latest（Phase 2.5 使用）|
 
 ## Phase 2.3 新增接口
 
@@ -46,15 +60,27 @@
 - **venv 路径**：`backend/venv/`，Python 3.12.10
 - **包安装**：`backend/venv/Scripts/python.exe -m pip install xxx`
 
-### 启动 Celery Worker（宿主机）
+### 开发环境启动（4 个终端）
 
 ```bash
+# 终端 1：数据库 + Redis（Docker）
+docker-compose -f docker-compose.dev.yml up db redis
+
+# 终端 2：后端 FastAPI
 cd backend
-export DATABASE_URL="postgresql+asyncpg://osscout:ossscout@localhost:5432/osscout"
-venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info -P solo
+./venv/Scripts/python.exe -m uvicorn app.main:app --reload
+
+# 终端 3：Celery Worker
+cd backend
+./venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info --pool=solo
+
+# 终端 4：前端 React
+cd frontend
+npm run dev
 ```
 
-> Windows 上使用 `-P solo` 避免多进程池兼容性问题。
+> Windows 上使用 `--pool=solo` 避免多进程池兼容性问题。
+> 后端通过 `backend/.env` 直连 localhost 数据库（Docker 端口映射已生效）。
 
 ### 已知环境问题
 
@@ -79,9 +105,16 @@ venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info 
 
 ## 下一步
 
-**Phase 2.4：React 前端骨架**
+**Phase 2.5：前端可视化**
 
-- HTTP 客户端封装（api/client.ts）
-- 首页：提交分析表单（输入 repo_url）
-- 报告详情页：文本版报告展示
-- 路由配置（React Router）
+- 评分仪表盘组件（环形图）
+- 各维度评分条形图
+- 对比页面（并排展示多项目）
+- 仓库列表页历史分析记录优化
+
+**Phase 3：V2 — Agent 智能化 + RAG**
+
+- LLM Client 封装（Claude + GPT 双后端）
+- 4 个分析 Agent 接入 LLM 推理
+- Orchestrator 升级为并行 + ReAct Loop
+- ChromaDB 向量库 + RAG 校准

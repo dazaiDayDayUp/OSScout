@@ -7,6 +7,7 @@ from typing import Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.database import init_db
@@ -36,6 +37,15 @@ app = FastAPI(
     description="开源项目深度尽调 Agent 平台",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# 注册 CORS 中间件，允许前端跨域访问
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 注册 v1 版本的所有子路由，统一前缀 /api/v1
