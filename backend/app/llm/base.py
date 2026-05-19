@@ -89,14 +89,31 @@ class LLMProvider(ABC):
             f"{json.dumps(schema_json, ensure_ascii=False, indent=2)}"
         )
 
-        # 复制消息列表，追加 JSON 指令
+        # 复制消息列表，将 JSON 指令追加到最后一条 user 消息中
+        # 注意：最后一条消息必须是 user 角色，否则部分模型（如 kimi-k2.6）不会响应
         structured_messages = [
             LLMMessage(role=msg.role, content=msg.content)
             for msg in messages
         ]
-        structured_messages.append(
-            LLMMessage(role="system", content=json_instruction)
-        )
+
+        # 找到最后一条 user 消息，将 JSON 指令追加到其内容中
+        last_user_idx = -1
+        for i in range(len(structured_messages) - 1, -1, -1):
+            if structured_messages[i].role == "user":
+                last_user_idx = i
+                break
+
+        if last_user_idx >= 0:
+            original = structured_messages[last_user_idx].content
+            structured_messages[last_user_idx] = LLMMessage(
+                role="user",
+                content=original + json_instruction,
+            )
+        else:
+            # 没有 user 消息时，添加一条新的 user 消息
+            structured_messages.append(
+                LLMMessage(role="user", content=json_instruction)
+            )
 
         response = await self.chat(
             messages=structured_messages,

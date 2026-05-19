@@ -77,6 +77,29 @@ class Reporter:
             lines.append(self._render_dimension(evolution))
             lines.append("")
 
+        # RAG 校准（Phase 3.4 新增）
+        if result.calibrations:
+            lines.append("-" * 60)
+            lines.append("知识库校准引用")
+            lines.append("-" * 60)
+            for dim_name, cal_results in result.calibrations.items():
+                if cal_results:
+                    lines.append(f"  [{dim_name}]")
+                    for cal in cal_results[:2]:  # 只展示前 2 条
+                        topic = cal.get("metadata", {}).get("topic", "")
+                        dist = cal.get("distance", 0)
+                        lines.append(f"    -> {topic} (相关度: {dist:.2f})")
+            lines.append("")
+
+        # 冲突消解（Phase 3.4 新增）
+        if result.conflicts:
+            lines.append("-" * 60)
+            lines.append("维度间冲突检测")
+            lines.append("-" * 60)
+            for conflict in result.conflicts:
+                lines.append(f"  ⚠ {conflict}")
+            lines.append("")
+
         # 关键发现
         if result.findings:
             lines.append("-" * 60)
@@ -94,6 +117,71 @@ class Reporter:
             for risk in result.risks:
                 lines.append(f"  ! {risk}")
             lines.append("")
+
+        # ReAct 总结（Phase 3.4 新增）
+        if result.react_summary:
+            lines.append("-" * 60)
+            lines.append("综合评估")
+            lines.append("-" * 60)
+            lines.append(f"  {result.react_summary}")
+            lines.append("")
+
+        # 综合报告（Phase 3.5 新增）
+        if result.synthesis:
+            lines.append("-" * 60)
+            lines.append("综合报告（Synthesis Agent）")
+            lines.append("-" * 60)
+
+            synth = result.synthesis
+            lines.append(f"  评级: {synth.get('overall_rating', 'N/A')}")
+            lines.append(f"  总分: {synth.get('overall_score', 0)}/100")
+            lines.append("")
+
+            # 执行摘要
+            summary = synth.get("executive_summary", "")
+            if summary:
+                lines.append("  [执行摘要]")
+                lines.append(f"    {summary}")
+                lines.append("")
+
+            # 各维度总结
+            dim_sums = synth.get("dimension_summaries", [])
+            if dim_sums:
+                lines.append("  [各维度总结]")
+                for ds in dim_sums:
+                    name = ds.get("name", "")
+                    pct = ds.get("percentage", 0)
+                    assessment = ds.get("assessment", "")
+                    lines.append(f"    {name}: {pct}% - {assessment}")
+                lines.append("")
+
+            # 风险矩阵
+            risks = synth.get("risk_matrix", [])
+            if risks:
+                lines.append("  [风险矩阵]")
+                for r in risks:
+                    level = r.get("level", "")
+                    cat = r.get("category", "")
+                    desc = r.get("description", "")
+                    src = r.get("source", "")
+                    lines.append(f"    [{level.upper()}] {cat}: {desc}")
+                    lines.append(f"      来源: {src}")
+                lines.append("")
+
+            # 建议
+            recs = synth.get("top_recommendations", [])
+            if recs:
+                lines.append("  [明确建议]")
+                for i, rec in enumerate(recs, 1):
+                    lines.append(f"    {i}. {rec}")
+                lines.append("")
+
+            # 数据来源
+            ds_summary = synth.get("data_source_summary", "")
+            if ds_summary:
+                lines.append("  [数据来源]")
+                lines.append(f"    {ds_summary}")
+                lines.append("")
 
         # 页脚
         lines.append("-" * 60)
@@ -150,6 +238,15 @@ class Reporter:
         lines.append(f"【{dim.get('dimension', 'unknown')}】")
         lines.append(f"  得分: {dim['score']}/{dim['max_score']} ({dim['percentage']}%)")
         lines.append("")
+
+        # LLM 推理（Phase 3.3 新增）
+        reasoning = dim.get("reasoning")
+        if reasoning and not reasoning.startswith("[LLM 推理不可用]"):
+            lines.append("  [推理]")
+            # 多行 reasoning 需要缩进
+            for line in reasoning.split("\n"):
+                lines.append(f"    {line}")
+            lines.append("")
 
         # 各项详细指标
         details = dim.get("details", {})

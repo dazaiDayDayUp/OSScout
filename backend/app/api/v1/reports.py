@@ -27,11 +27,12 @@ class DimensionScore(BaseModel):
     percentage: float = Field(..., description="得分百分比")
     findings: list[str] = Field(default_factory=list, description="关键发现")
     risks: list[str] = Field(default_factory=list, description="风险提示")
+    reasoning: str | None = Field(None, description="LLM 推理过程")
     details: dict = Field(default_factory=dict, description="详细指标")
 
 
 class ReportResponse(BaseModel):
-    """尽调报告响应体"""
+    """尽调报告响应体（Phase 3 增强版）"""
 
     report_id: int = Field(..., description="报告唯一标识")
     task_id: int = Field(..., description="关联的任务 ID")
@@ -40,6 +41,11 @@ class ReportResponse(BaseModel):
     dimensions: dict = Field(..., description="各维度评分详情")
     key_findings: list[str] = Field(default_factory=list, description="关键发现")
     recommendations: list[str] = Field(default_factory=list, description="建议")
+    # Phase 3.4/3.5 新增字段
+    calibrations: dict = Field(default_factory=dict, description="RAG 知识库校准引用")
+    conflicts: list[str] = Field(default_factory=list, description="维度间冲突检测")
+    react_summary: str = Field("", description="ReAct Loop 综合总结")
+    synthesis: dict = Field(default_factory=dict, description="综合报告 Agent 输出")
     created_at: datetime | None = Field(None, description="报告生成时间")
 
 
@@ -198,7 +204,7 @@ async def get_report(
             "fork_count": None,
         }
 
-    # 构造 dimensions 响应结构
+    # 构造 dimensions 响应结构（包含 Phase 3.3 reasoning 字段）
     dimensions = {}
     for dim_name, dim_data in dimensions_raw.items():
         if isinstance(dim_data, dict):
@@ -208,6 +214,7 @@ async def get_report(
                 "percentage": dim_data.get("percentage", 0.0),
                 "findings": dim_data.get("findings", []),
                 "risks": dim_data.get("risks", []),
+                "reasoning": dim_data.get("reasoning"),
                 "details": dim_data.get("details", {}),
             }
 
@@ -227,5 +234,10 @@ async def get_report(
         dimensions=dimensions,
         key_findings=report.key_findings or [],
         recommendations=report.recommendations or [],
+        # Phase 3.4/3.5 新增字段
+        calibrations=raw.get("calibrations", {}),
+        conflicts=raw.get("conflicts", []),
+        react_summary=raw.get("react_summary", ""),
+        synthesis=raw.get("synthesis", {}),
         created_at=report.created_at,
     )

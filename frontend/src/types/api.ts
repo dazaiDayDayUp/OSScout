@@ -48,6 +48,46 @@ export interface TaskResponse {
 // 报告接口
 // ═══════════════════════════════════════════════════════════════
 
+/** RAG 校准引用项 */
+export interface CalibrationItem {
+  id: string
+  content: string
+  metadata: {
+    category: string
+    topic: string
+    source_file: string
+  }
+  distance: number
+}
+
+/** 综合报告中的风险项 */
+export interface SynthesisRiskItem {
+  level: 'high' | 'medium' | 'low'
+  category: string
+  description: string
+  source: string
+}
+
+/** 综合报告中的维度总结 */
+export interface SynthesisDimensionSummary {
+  name: string
+  score: number
+  max_score: number
+  percentage: number
+  assessment: string
+}
+
+/** 综合报告 */
+export interface SynthesisReport {
+  executive_summary: string
+  overall_rating: string
+  overall_score: number
+  dimension_summaries: SynthesisDimensionSummary[]
+  risk_matrix: SynthesisRiskItem[]
+  top_recommendations: string[]
+  data_source_summary: string
+}
+
 /** 单个维度的评分详情 */
 export interface DimensionScore {
   score: number
@@ -55,10 +95,11 @@ export interface DimensionScore {
   percentage: number
   findings: string[]
   risks: string[]
+  reasoning?: string | null
   details: Record<string, unknown>
 }
 
-/** 尽调报告响应 */
+/** 尽调报告响应（Phase 3 增强版） */
 export interface ReportResponse {
   report_id: number
   task_id: number
@@ -80,6 +121,11 @@ export interface ReportResponse {
   dimensions: Record<string, DimensionScore>
   key_findings: string[]
   recommendations: string[]
+  // Phase 3.4/3.5 新增字段
+  calibrations: Record<string, CalibrationItem[]>
+  conflicts: string[]
+  react_summary: string
+  synthesis: SynthesisReport | Record<string, never>
   created_at: string | null
 }
 

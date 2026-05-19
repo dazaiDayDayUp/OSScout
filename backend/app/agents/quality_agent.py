@@ -1,12 +1,17 @@
-"""代码质量分析 Agent"""
+"""代码质量分析 Agent（规则评分 + LLM 推理增强）"""
 
 import asyncio
 
 from pydantic import BaseModel
 
+from app.core.logger import get_logger
 from app.core.utils import parse_repo_url
 from app.mcp.client import CodeAnalysisMCPClient, FilesystemMCPClient
 from app.scoring.quality import score_code_quality
+
+from .llm_enhancer import LLMEnhancer, QUALITY_ENHANCE_PROMPT
+
+logger = get_logger(__name__)
 
 
 class QualityAgentResult(BaseModel):
@@ -18,6 +23,7 @@ class QualityAgentResult(BaseModel):
     percentage: float
     findings: list[str]
     risks: list[str]
+    reasoning: str | None = None  # LLM 推理过程
     details: dict
     repo: dict
 
@@ -31,7 +37,13 @@ class QualityAgent:
     - 静态分析漏洞
     - 文档完整度
     - 代码复杂度
+
+    Phase 3.3 增强：在规则评分基础上接入 LLM 推理。
     """
+
+    def __init__(self) -> None:
+        """初始化 Agent，创建 LLM 增强器实例"""
+        self._enhancer = LLMEnhancer()
 
     async def analyze(self, repo_url: str) -> QualityAgentResult:
         """
@@ -71,44 +83,35 @@ class QualityAgent:
             "tests": tests,
         }
 
-        # 4. 调用评分引擎
+        # 4. 调用评分引擎（规则评分打底）
         score_result = score_code_quality(raw_data)
 
-        # 5. 组装输出
-        percentage = round(score_result.total_score / score_result.max_score * 100, 1)
+        # 5. LLM 推理增强
+        llm_result = await self._enhancer.enhance(
+            dimension="quality",
+            prompt_template=QUALITY_ENHANCE_PROMPT,
+            template_vars=self._build_prompt_vars(owner, repo, score_result),
+        )
+
+        # 6. 组装输出
+        percentage = round(score_result.total_score / 25 * 100, 1)
+
+        all_findings = list(score_result.findings) + list(llm_result.additional_findings)
+        all_risks = list(score_result.risks) + list(llm_result.additional_risks)
 
         return QualityAgentResult(
             dimension="quality",
             score=score_result.total_score,
-            max_score=score_result.max_score,
+            max_score=25,
             percentage=percentage,
-            findings=score_result.findings,
-            risks=score_result.risks,
+            findings=all_findings,
+            risks=all_risks,
+            reasoning=llm_result.reasoning,
             details={
-                "test_coverage": {
-                    "score": score_result.test_coverage.score,
-                    "max_score": score_result.test_coverage.max_score,
-                    "raw_value": score_result.test_coverage.raw_value,
-                    "description": score_result.test_coverage.description,
-                },
-                "static_analysis": {
-                    "score": score_result.static_analysis.score,
-                    "max_score": score_result.static_analysis.max_score,
-                    "raw_value": score_result.static_analysis.raw_value,
-                    "description": score_result.static_analysis.description,
-                },
-                "documentation": {
-                    "score": score_result.documentation.score,
-                    "max_score": score_result.documentation.max_score,
-                    "raw_value": score_result.documentation.raw_value,
-                    "description": score_result.documentation.description,
-                },
-                "code_complexity": {
-                    "score": score_result.code_complexity.score,
-                    "max_score": score_result.code_complexity.max_score,
-                    "raw_value": score_result.code_complexity.raw_value,
-                    "description": score_result.code_complexity.description,
-                },
+                "test_coverage": self._item_to_dict(score_result.test_coverage),
+                "static_analysis": self._item_to_dict(score_result.static_analysis),
+                "documentation": self._item_to_dict(score_result.documentation),
+                "code_complexity": self._item_to_dict(score_result.code_complexity),
             },
             repo={
                 "owner": owner,
@@ -116,6 +119,64 @@ class QualityAgent:
                 "url": repo_url,
             },
         )
+
+    @staticmethod
+    def _item_to_dict(item) -> dict:
+        """安全地将 ScoreItem 转为字典"""
+        if item is None:
+            return {}
+        return {
+            "score": getattr(item, "score", 0),
+            "max_score": getattr(item, "max_score", 0),
+            "raw_value": getattr(item, "raw_value", "N/A"),
+            "description": getattr(item, "description", ""),
+        }
+
+    @staticmethod
+    def _build_prompt_vars(owner: str, repo: str, score_result) -> dict:
+        """构造 LLM 增强 Prompt 的模板变量"""
+        def item_vals(item):
+            if item is None:
+                return {"score": 0, "max": 0, "raw": "N/A", "desc": "数据不可用"}
+            return {
+                "score": getattr(item, "score", 0),
+                "max": getattr(item, "max_score", 0),
+                "raw": getattr(item, "raw_value", "N/A"),
+                "desc": getattr(item, "description", ""),
+            }
+
+        tc = item_vals(score_result.test_coverage)
+        sa = item_vals(score_result.static_analysis)
+        doc = item_vals(score_result.documentation)
+        cc = item_vals(score_result.code_complexity)
+
+        percentage = round(score_result.total_score / 25 * 100, 1)
+
+        return {
+            "owner": owner,
+            "repo": repo,
+            "test_coverage_score": tc["score"],
+            "test_coverage_max": tc["max"],
+            "test_coverage_raw": tc["raw"],
+            "test_coverage_desc": tc["desc"],
+            "static_analysis_score": sa["score"],
+            "static_analysis_max": sa["max"],
+            "static_analysis_raw": sa["raw"],
+            "static_analysis_desc": sa["desc"],
+            "documentation_score": doc["score"],
+            "documentation_max": doc["max"],
+            "documentation_raw": doc["raw"],
+            "documentation_desc": doc["desc"],
+            "code_complexity_score": cc["score"],
+            "code_complexity_max": cc["max"],
+            "code_complexity_raw": cc["raw"],
+            "code_complexity_desc": cc["desc"],
+            "total_score": score_result.total_score,
+            "max_score": 25,
+            "percentage": percentage,
+            "findings": "; ".join(score_result.findings) if score_result.findings else "无",
+            "risks": "; ".join(score_result.risks) if score_result.risks else "无",
+        }
 
     async def _check_documentation(self, fs_client: FilesystemMCPClient, path: str) -> dict:
         """检查项目文档是否齐全"""
