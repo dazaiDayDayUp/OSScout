@@ -64,3 +64,6 @@ logs/
 
 # === claude ===
 .claude/
+
+# Docker 构建忽略文件（个人开发配置）
+backend/.dockerignore
