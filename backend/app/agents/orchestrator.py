@@ -160,7 +160,12 @@ class Orchestrator:
         all_risks: list[str] = []
 
         for name, result in zip(dimension_names, results):
-            if isinstance(result, Exception):
+            if isinstance(result, asyncio.CancelledError):
+                # Agent 被异步取消（通常是外部超时或 Worker 终止信号）
+                dim_result = self._fallback_result(name, repo_info, "分析任务被取消")
+                all_risks.append(f"{name} 维度分析被取消")
+                calibrations[name] = []
+            elif isinstance(result, Exception):
                 # Agent 失败，生成降级结果
                 dim_result = self._fallback_result(name, repo_info, str(result))
                 all_risks.append(f"{name} 维度分析失败: {result}")

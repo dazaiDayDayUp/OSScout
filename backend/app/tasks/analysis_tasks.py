@@ -149,7 +149,9 @@ def run_due_diligence(task_id: int, repo_id: int, repo_url: str) -> dict:
         asyncio.run(_async_run_analysis(task_id, repo_id, repo_url))
         return {"task_id": task_id, "status": "completed"}
 
-    except Exception as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         # 分析失败，标记任务状态
+        # 注意：asyncio.CancelledError 不是 Exception 的子类（继承自 BaseException），
+        # 需要显式捕获，否则会从 Celery 任务中逃逸导致 Worker 异常
         asyncio.run(_async_mark_failed(task_id, str(exc)))
         return {"task_id": task_id, "status": "failed", "error": str(exc)}

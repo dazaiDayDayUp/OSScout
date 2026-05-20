@@ -34,6 +34,9 @@ class LLMResponse(BaseModel):
     usage: LLMUsage = Field(default_factory=LLMUsage, description="Token 用量")
     model: str = Field(..., description="实际调用的模型名称")
     provider: str = Field(..., description="Provider 标识：kimi / deepseek")
+    reasoning_content: str | None = Field(
+        default=None, description="思考模型的推理过程（kimi-k2 系列）"
+    )
 
 
 class StructuredOutput(BaseModel):

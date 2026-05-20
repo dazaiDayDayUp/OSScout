@@ -109,7 +109,7 @@ POST /api/v1/compare -d '{"repo_urls": ["url1", "url2"]}'
 
 ## 快速开始
 
-### 1. 启动开发环境（需要 4 个终端）
+### 1. 启动开发环境（需要 4 个终端，可选第 5 个启动 Flower）
 
 ```bash
 # 终端 1：数据库 + Redis（Docker）
@@ -126,6 +126,11 @@ cd backend
 # 终端 4：前端 React
 cd frontend
 npm run dev
+
+# 终端 5（可选）：Flower 监控面板 — 实时查看任务队列和 Worker 状态
+# 需要先确保 Redis 已启动，然后访问 http://localhost:5555
+cd backend
+./venv/Scripts/python.exe -m celery -A app.core.celery_app flower --port=5555
 ```
 
 ### 2. 运行 CLI 分析
@@ -265,12 +270,12 @@ osscout/
 
 ## 已知限制
 
-| 限制 | 说明 | 计划解决 |
-|------|------|----------|
-| Kimi 并发限制导致 LLM 降级 | Moonshot 免费账户并发上限 3，4 个 Agent 并行时第 4 个触发 429 | 增加重试/退避机制 |
-| 分析耗时过长 | 完整分析需 3-5 分钟，用户体验差 | 进度反馈 + 缓存预热 |
-| 超大仓库超时 | facebook/react 等 monorepo 分析需 3 分钟 | Phase 4 |
-| Windows 控制台乱码 | 中文输出在默认 GBK 编码控制台显示为乱码，不影响文件/API | 建议用 DataGrip 查看数据库 |
+| 限制 | 说明 |
+|------|------|
+| Kimi 并发限制（429） | 免费账户并发上限 3，Synthesis 可能触发 429 重试，延迟 10-60 秒，最终能成功 |
+| 分析耗时约 2 分钟 | 完整链路仍有优化空间，Phase 4 计划引入缓存预热和进度反馈 |
+| 超大仓库耗时较长 | facebook/react 等 monorepo 依赖查询串行，Phase 4 优化 |
+| Windows 控制台乱码 | GBK 编码问题，不影响文件/API，建议用 DataGrip 查看数据库 |
 
 ---
 

@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-**Phase 3 全部完成（3.1-3.5），前端适配完成。**
+**Phase 3 全部完成（3.1-3.5），前端适配完成，MCP Client 并发问题已彻底修复。**
 
-最近更新：2026-05-19
+最近更新：2026-05-20
 
 ---
 
@@ -114,16 +114,24 @@ cd frontend && npm run dev
 
 ---
 
-## 已知问题（2026-05-19 更新）
+## 已知问题（2026-05-20 更新）
 
-| 优先级 | 问题 | 说明 | 计划解决 |
-|--------|------|------|----------|
-| **高** | Kimi 并发限制导致 LLM 降级 | Moonshot 免费账户并发上限 3，4 个 Agent 并行时第 4 个触发 429，LLM 增强降级 | 增加重试/退避机制，或限制 LLM 并发数 |
-| **高** | 前端提交后分析耗时过长 | 完整分析需 3-5 分钟（GitHub API + 4xAgent + RAG + Synthesis），用户体验差 | 增加进度反馈 / 预热缓存 / 优化超时 |
-| **高** | 旧报告无 Phase 3 数据 | Phase 2 生成的报告 `raw_results` 中无 reasoning/calibrations/synthesis | 正常，重新分析即可生成完整数据 |
-| **中** | Windows 控制台 GBK 乱码 | 中文日志/API 返回正常，仅控制台显示乱码 | 低优先级 |
-| **中** | 超大仓库分析耗时过长 | facebook/react 需 3 分钟（npm 依赖版本查询串行） | Phase 4 |
+| 优先级 | 问题 | 说明 | 状态 |
+|--------|------|------|------|
+| **中** | Kimi 并发限制（429） | 免费账户并发上限 3，Synthesis 调用时可能触发 429 重试，延迟 10-60 秒 | OpenAI 客户端自动重试，最终会成功 |
+| **中** | 分析耗时约 2 分钟 | 完整链路：GitHub API + 4 Agent + RAG + Synthesis，对用户体验仍有优化空间 | Phase 4 优化 |
+| **中** | 超大仓库分析耗时过长 | facebook/react 等 monorepo 依赖查询串行，耗时增加 | Phase 4 |
+| **低** | Windows 控制台 GBK 乱码 | 仅控制台显示问题，不影响文件/API | 低优先级 |
 | **低** | 对比分析同步阻塞 | 对比接口同步等待所有 Celery 任务完成 | Phase 4 |
+
+## 本轮修复记录（2026-05-20）
+
+| 问题 | 根因 | 修复方案 |
+|------|------|---------|
+| MCP Client `bound to a different event loop` | 单例实例的 asyncio.Lock 跨事件循环复用 | **禁用单例**，每个 `async with` 创建全新实例 |
+| Kimi temperature=1.0 被 API 400 拒绝 | API 端 temperature 限制从 1.0 变为 0.6 | 修正为 0.6 |
+| Synthesis 两步 JSON 转换失败 | kimi-k2.6 思考模型返回思考过程而非 JSON | **一步直接生成 JSON** + 禁用思考 + 自动归一化 |
+| `additional_risks` Schema 校验失败 | 模型返回字符串而非列表 | `base.py` 增加 `_normalize_parsed_data` 自动修复 |
 
 ---
 

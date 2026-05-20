@@ -30,6 +30,8 @@ class LLMProvider(ABC):
     def __init__(self, provider_name: str, model: str) -> None:
         self.provider_name = provider_name
         self.model = model
+        # 子类可覆盖：是否支持 response_format={"type": "json_object"}
+        self.supports_json_mode = False
 
     @abstractmethod
     async def chat(
@@ -84,8 +86,9 @@ class LLMProvider(ABC):
         # 构造 JSON 指令
         schema_json = output_schema.model_json_schema()
         json_instruction = (
-            f"\n\n你必须严格按照以下 JSON Schema 返回结果，"
-            f"不要输出任何其他内容（如 markdown 代码块标记、解释性文字等）：\n"
+            f"\n\n你必须严格按照以下 JSON Schema 返回结果。"
+            f"直接输出合法 JSON，不要输出任何其他内容"
+            f"（如 markdown 代码块标记、解释性文字、思考过程等）：\n"
             f"{json.dumps(schema_json, ensure_ascii=False, indent=2)}"
         )
 
@@ -114,6 +117,17 @@ class LLMProvider(ABC):
             structured_messages.append(
                 LLMMessage(role="user", content=json_instruction)
             )
+
+        # 如果 Provider 支持 json_object 响应格式，强制模型输出 JSON
+        if self.supports_json_mode:
+            kwargs.setdefault("response_format", {"type": "json_object"})
+
+        # 对于 Kimi k2 系列思考模型，禁用思考能力以确保 JSON 输出稳定性。
+        # 思考模型会在 reasoning_content 中输出分析过程，与 content 分离，
+        # 但 chat_structured 只读取 content 进行 JSON 解析，因此禁用思考
+        # 让模型把所有输出都放在 content 中。
+        if self.provider_name == "kimi" and self.model.startswith("kimi-k2"):
+            kwargs.setdefault("extra_body", {"thinking": {"type": "disabled"}})
 
         response = await self.chat(
             messages=structured_messages,
@@ -148,6 +162,9 @@ class LLMProvider(ABC):
                 f"原始内容（前 500 字符）: {raw_content[:500]}"
             ) from e
 
+        # 自动修复常见格式错误（如字符串应转为列表）
+        parsed = self._normalize_parsed_data(parsed, output_schema)
+
         # 校验为 Pydantic 模型
         try:
             return output_schema.model_validate(parsed)
@@ -162,3 +179,35 @@ class LLMProvider(ABC):
             raise ValueError(
                 f"LLM 返回的 JSON 不符合预期的 Schema: {e}"
             ) from e
+
+    @staticmethod
+    def _normalize_parsed_data(data: dict, schema: type[T]) -> dict:
+        """
+        自动修复 LLM 返回 JSON 中的常见格式错误
+
+        kimi-k2.6 等模型即使禁用思考 + json_object 模式，
+        仍可能把 list[str] 字段输出为单个字符串。
+        这里根据 Schema 定义自动将字符串转为单元素列表。
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 遍历 Schema 的所有字段，找出类型为 list 的字段
+        for field_name, field_info in schema.model_fields.items():
+            if field_name not in data:
+                continue
+            value = data[field_name]
+            annotation = field_info.annotation
+
+            # 检测字段期望类型是否为 list[str] 或 list
+            is_list_type = False
+            if hasattr(annotation, "__origin__"):
+                is_list_type = annotation.__origin__ is list
+            elif isinstance(annotation, type) and annotation is list:
+                is_list_type = True
+
+            # 如果期望是 list 但实际收到 str，自动包装为单元素列表
+            if is_list_type and isinstance(value, str):
+                data[field_name] = [value]
+
+        return data

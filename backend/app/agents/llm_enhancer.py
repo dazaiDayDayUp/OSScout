@@ -51,7 +51,8 @@ class LLMEnhancementOutput(BaseModel):
     additional_risks: list[str] = Field(
         default_factory=list,
         description="规则评分未能识别的额外风险，"
-                    "通常是跨指标关联分析才能发现的深层问题。",
+                    "通常是跨指标关联分析才能发现的深层问题。"
+                    "注意：必须是字符串列表，不要返回单个字符串。",
     )
 
     overall_assessment: str = Field(

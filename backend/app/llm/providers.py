@@ -42,6 +42,8 @@ class _OpenAICompatibleProvider(LLMProvider):
             api_key=api_key,
             base_url=base_url,
         )
+        # 默认不支持 json_object 响应格式，子类可覆盖
+        self.supports_json_mode = False
 
     async def chat(
         self,
@@ -82,6 +84,23 @@ class _OpenAICompatibleProvider(LLMProvider):
         choice = completion.choices[0]
         content = choice.message.content or ""
 
+        # 提取思考过程（kimi-k2 系列）
+        reasoning_content = None
+        if hasattr(choice.message, "reasoning_content"):
+            reasoning_content = getattr(choice.message, "reasoning_content", None) or None
+
+        # 仅在非结构化输出模式下，才允许从 reasoning_content fallback。
+        # 结构化输出（chat_structured）要求严格的 JSON，
+        # reasoning_content 中是思考过程而非有效 JSON，不能作为备选。
+        is_structured = kwargs.get("response_format", {}).get("type") == "json_object"
+        if not content and not is_structured and reasoning_content:
+            logger.debug(
+                "从 reasoning_content 提取内容（非结构化输出模式）",
+                provider=self.provider_name,
+                model=self.model,
+            )
+            content = reasoning_content
+
         # 提取 token 用量（部分 Provider 可能不返回 usage）
         usage = completion.usage
         if usage:
@@ -105,6 +124,7 @@ class _OpenAICompatibleProvider(LLMProvider):
             usage=usage_obj,
             model=self.model,
             provider=self.provider_name,
+            reasoning_content=reasoning_content,
         )
 
 
@@ -128,6 +148,8 @@ class KimiProvider(_OpenAICompatibleProvider):
             base_url=base_url,
             model=model,
         )
+        # kimi 支持 json_object 响应格式，可强制模型输出 JSON
+        self.supports_json_mode = True
 
     async def chat(
         self,
@@ -140,18 +162,18 @@ class KimiProvider(_OpenAICompatibleProvider):
         Kimi 特定模型的温度修正
 
         kimi-k2.6 / kimi-k2.5 / kimi-k2-thinking 等思考模型
-        强制要求 temperature=1.0，传入其他值会报 400 错误。
+        强制要求 temperature=0.6，传入其他值会报 400 错误。
         这里自动修正并记录日志，避免业务代码需要关心这个限制。
         """
-        # k2 系列思考模型强制 temperature=1.0
-        if self.model.startswith("kimi-k2") and temperature != 1.0:
+        # k2 系列思考模型强制 temperature=0.6（API 端最新限制）
+        if self.model.startswith("kimi-k2") and temperature != 0.6:
             logger.warning(
-                "kimi 思考模型强制使用 temperature=1.0，"
+                "kimi 思考模型强制使用 temperature=0.6，"
                 "自动修正传入值",
                 model=self.model,
                 requested_temperature=temperature,
             )
-            temperature = 1.0
+            temperature = 0.6
 
         return await super().chat(
             messages=messages,
