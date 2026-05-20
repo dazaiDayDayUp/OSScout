@@ -247,8 +247,8 @@ def score_competitor_comparison() -> ScoreItem:
     """
     竞品对比评分（4 分）
 
-    Phase 1 跳过，固定返回 0 分。
-    待 Phase 2/3 接入竞品搜索和对比功能。
+    竞品对比依赖外部搜索能力（如 Google Serper API），
+    当前未配置搜索服务，固定返回 0 分。
     """
     return ScoreItem(
         score=0,

@@ -4,8 +4,6 @@ LLM 模块的数据模型定义
 使用 Pydantic 定义统一的请求/响应数据结构，
 屏蔽不同厂商 LLM 的差异。
 """
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 

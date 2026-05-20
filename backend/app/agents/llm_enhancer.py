@@ -9,8 +9,6 @@
 4. LLM 擅长发现规则无法捕捉的模式（如"PR 合并率 60% 但核心维护者减少"）
 """
 
-import json
-
 from pydantic import BaseModel, Field
 
 from app.llm.base import LLMProvider

@@ -1,7 +1,6 @@
 """技术演进数据采集：releases + SBOM + PyPI/npm 最新版本 + Breaking Change 检测"""
 
 import asyncio
-import json
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any

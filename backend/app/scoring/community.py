@@ -94,8 +94,7 @@ def score_issue_response(issues: list[dict]) -> ScoreItem:
     """
     Issue 响应速度：Issue 从创建到关闭的中位处理时间
 
-    Phase 1.1 简化方案：用已关闭 Issue 的 (closed_at - created_at) 中位数
-    作为响应速度的代理指标。后续接入 LLM 后可获取评论时间做更精确计算。
+    用已关闭 Issue 的 (closed_at - created_at) 中位数作为响应速度的代理指标。
     """
     # 筛选已关闭且有关闭时间的 issue
     closed_issues = [
