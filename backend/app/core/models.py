@@ -125,3 +125,42 @@ class MetricHistory(Base):
     repository: Mapped["Repository"] = relationship(
         "Repository", back_populates="metric_history"
     )
+
+
+class BenchmarkData(Base):
+    """行业基准数据表
+
+    存储各类开源项目的指标基准值（均值、中位数、分位数），
+    供 Agent 在分析时做行业对比。
+    数据来源：OpenSSF Scorecard、CHAOSS、GitHub API 等。
+    """
+
+    __tablename__ = "benchmark_data"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )  # 项目类型：frontend-framework、backend-framework、cli-tool 等
+    metric_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True
+    )  # 指标名：code_review_score、bus_factor、pr_merge_rate 等
+    metric_source: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # 数据来源：openssf_scorecard、chaoss、github_api、manual
+    avg_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    median_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p25_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p75_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    sample_projects: Mapped[list[str]] = mapped_column(
+        JSON, default=list
+    )  # 样本项目列表，如 ["facebook/react", "vuejs/core"]
+    data_version: Mapped[str] = mapped_column(
+        String(20), default="2026-05"
+    )  # 数据批次，如 "2026-05"
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # 额外说明文字，供 LLM 直接引用
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )

@@ -68,3 +68,6 @@ chroma_db/
 
 # Docker 构建忽略文件（个人开发配置）
 backend/.dockerignore
+
+# 知识库文档（从权威来源自动下载，不纳入版本控制）
+knowledge-base/
