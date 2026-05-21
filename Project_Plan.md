@@ -238,7 +238,9 @@ pytest-asyncio
 | 技术栈老化度 | 核心依赖的最新版本差距 | >2 个大版本 风险 |
 | 竞品对比活跃度 | 与 2-3 个竞品项目的 star/issue 增长对比 | 显著落后 风险 |
 
-### 4.2 Orchestrator 协调逻辑
+### 4.2 Orchestrator 协调逻辑（Phase 3 版本，Phase 5 重构为 LLM 自主驱动）
+
+**Phase 3 实现（当前）**：硬编码并行调度 4 个 Agent
 
 ```python
 class DueDiligenceOrchestrator:
@@ -271,6 +273,63 @@ class DueDiligenceOrchestrator:
 
         return report
 ```
+
+**Phase 5 目标（重构后）**：LLM 自主规划 → 自主调用工具 → 自主推理
+
+```python
+class AutonomousAgent:
+    async def analyze(self, repo_url: str) -> DueDiligenceReport:
+        # 1. LLM 制定分析计划（Plan）
+        plan = await self.llm.plan(
+            task=f"分析仓库 {repo_url} 的开源健康度",
+            available_tools=self.tool_registry.list(),
+        )
+        # plan 示例：
+        # ["get_repo_metadata", "list_contributors", "rag.query:社区健康标准",
+        #  "clone_repo", "run_code_analysis", "rag.query:代码质量基准",
+        #  "check_osv_vulnerabilities", "rag.query:安全漏洞案例", "generate_report"]
+
+        # 2. ReAct Loop：按 Plan 逐步执行
+        observations = []
+        for step in plan.steps:
+            # Thought：LLM 决定下一步 Action
+            thought = await self.llm.think(observations)
+
+            # Action：LLM 输出 tool_call（自主决定调用哪个工具、传什么参数）
+            action = await self.llm.decide_action(thought, self.tool_registry)
+
+            # Observation：执行工具，返回结果
+            result = await self.tool_executor.run(action)
+            observations.append({"thought": thought, "action": action, "result": result})
+
+            # 可选：LLM 自主决定是否需要 RAG 检索来验证结论
+            if await self.llm.needs_calibration(observations):
+                rag_results = await self.rag_tool.query(
+                    await self.llm.formulate_rag_query(observations)
+                )
+                observations.append({"rag_results": rag_results})
+
+        # 3. Reflection：分析完成后自我检查
+        reflection = await self.llm.reflect(observations)
+        if reflection.has_gaps:
+            # 发现遗漏，补充验证
+            additional_obs = await self.execute_additional_steps(reflection.missing_checks)
+            observations.extend(additional_obs)
+
+        # 4. 生成最终报告
+        report = await self.llm.generate_report(observations)
+        return report
+```
+
+**关键区别**：
+| | Phase 3（当前） | Phase 5（目标） |
+|--|----------------|----------------|
+| 分析路径 | 硬编码：4 个 Agent 并行 | LLM 自主规划，动态调整 |
+| 工具调用 | Python 代码层调用 | LLM 通过 Function Calling 自主调用 |
+| RAG 使用 | Orchestrator 固定在每个 Agent 后调用 | LLM 自主决定何时检索、检索什么 |
+| 维度覆盖 | 固定 4 维度 | LLM 根据项目特点动态调整权重和重点 |
+| 错误恢复 | 代码层 try/except | LLM 自主调整 Plan，绕过失败步骤 |
+| 可解释性 | 展示 reasoning 字段 | 展示完整 Thought → Action → Observation 链条 |
 
 ---
 
@@ -549,24 +608,24 @@ Response: 200 OK
 
 ### Phase 0：基础设施（Week 1）
 
-- [ ] 项目脚手架搭建（FastAPI + SQLAlchemy + Alembic）
-- [ ] Docker Compose 开发环境
-- [ ] 数据库 Schema 设计与迁移
-- [ ] GitHub API 封装（带限频和缓存）
-- [ ] 基础日志和错误处理
+- [x] 项目脚手架搭建（FastAPI + SQLAlchemy + Alembic）
+- [x] Docker Compose 开发环境
+- [x] 数据库 Schema 设计与迁移
+- [x] GitHub API 封装（带限频和缓存）
+- [x] 基础日志和错误处理
 
 ### Phase 1：MVP — 单项目分析（Week 2-3）
 
 **目标**：CLI 运行，输入 repo URL，输出文本报告
 
-- [ ] github-mcp server 实现
-- [ ] filesystem-mcp server 实现（仓库克隆）
-- [ ] 社区健康度 Agent（纯规则评分，无 LLM）
-- [ ] 代码质量 Agent（Semgrep + radon 集成）
-- [ ] 安全分析 Agent（OSV 查询 + 许可证检查）
-- [ ] 基础 Orchestrator（串行执行）
-- [ ] 文本格式报告生成
-- [ ] 5 个热门项目的基准测试
+- [x] github-mcp server 实现
+- [x] filesystem-mcp server 实现（仓库克隆）
+- [x] 社区健康度 Agent（纯规则评分，无 LLM）
+- [x] 代码质量 Agent（Semgrep + radon 集成）
+- [x] 安全分析 Agent（OSV 查询 + 许可证检查）
+- [x] 基础 Orchestrator（串行执行）
+- [x] 文本格式报告生成
+- [x] 5 个热门项目的基准测试
 
 **验收标准**：
 - 能完整分析 `vercel/next.js`、`python-poetry/poetry` 等项目
@@ -596,7 +655,7 @@ Phase 2 拆分为 5 个小阶段递进执行：
 - [x] Celery 应用配置（Redis broker）
 - [x] `run_due_diligence` 异步任务
 - [x] `/api/v1/analyze` 改为"提交 Celery 任务 + 立即返回 task_id"
-- [ ] docker-compose.dev.yml 启用 worker 服务（Phase 5 统一配置）
+- [ ] docker-compose.dev.yml 启用 worker 服务（后续优化阶段统一配置）
 
 **验收标准**：
 - 提交任务后立即返回，不阻塞 HTTP 响应
@@ -630,10 +689,10 @@ Phase 2 拆分为 5 个小阶段递进执行：
 
 #### Phase 2.5：前端可视化
 
-- [ ] 评分仪表盘组件（环形图）
-- [ ] 各维度评分条形图
-- [ ] 对比页面（并排展示多项目）
-- [ ] 仓库列表页（历史分析记录）
+- [x] 评分仪表盘组件（环形图）
+- [x] 各维度评分条形图
+- [x] 对比页面（并排展示多项目）
+- [x] 仓库列表页（历史分析记录）
 
 **验收标准**：
 - Web UI 可浏览报告、查看可视化评分
@@ -667,12 +726,12 @@ Phase 3 拆分为 5 个小阶段递进执行：
 
 #### Phase 3.2：ChromaDB 向量库 + 知识库文档入库
 
-- [ ] ChromaDB 本地部署（Python 嵌入式，无需额外服务）
-- [ ] Embedding 模型接入（`all-MiniLM-L6-v2`，本地推理）
-- [ ] 评估方法论文档分块入库（OpenSSF Scorecard 标准、CNCF 毕业标准等）
-- [ ] 失败案例库入库（left-pad、Faker.js、colors.js、event-stream 等）
-- [ ] 竞品映射文档入库（常见选型场景的竞品关系）
-- [ ] 向量检索封装（`rag/vector_store.py` + `rag/query.py`）
+- [x] ChromaDB 本地部署（Python 嵌入式，无需额外服务）
+- [x] Embedding 模型接入（`all-MiniLM-L6-v2`，本地推理）
+- [x] 评估方法论文档分块入库（OpenSSF Scorecard 标准、CNCF 毕业标准等）
+- [x] 失败案例库入库（left-pad、Faker.js、colors.js、event-stream 等）
+- [x] 竞品映射文档入库（常见选型场景的竞品关系）
+- [x] 向量检索封装（`rag/vector_store.py` + `rag/query.py`）
 
 **验收标准**：
 - 能执行语义检索："Bus Factor 低的风险" → 返回 left-pad 等失败案例
@@ -680,11 +739,11 @@ Phase 3 拆分为 5 个小阶段递进执行：
 
 #### Phase 3.3：4 个分析 Agent 接入 LLM 推理
 
-- [ ] 社区健康 Agent：规则评分打底 + LLM 推理增强（判断"即将放弃维护"信号）
-- [ ] 代码质量 Agent：规则评分打底 + LLM 推理增强（判断文档质量、架构合理性）
-- [ ] 安全分析 Agent：规则评分打底 + LLM 推理增强（判断漏洞影响面、修复优先级）
-- [ ] 技术演进 Agent：规则评分打底 + LLM 推理增强（判断技术栈老化风险）
-- [ ] 每个 Agent 输出格式统一：评分 + findings（含 reasoning 字段）+ 风险标记
+- [x] 社区健康 Agent：规则评分打底 + LLM 推理增强（判断"即将放弃维护"信号）
+- [x] 代码质量 Agent：规则评分打底 + LLM 推理增强（判断文档质量、架构合理性）
+- [x] 安全分析 Agent：规则评分打底 + LLM 推理增强（判断漏洞影响面、修复优先级）
+- [x] 技术演进 Agent：规则评分打底 + LLM 推理增强（判断技术栈老化风险）
+- [x] 每个 Agent 输出格式统一：评分 + findings（含 reasoning 字段）+ 风险标记
 
 **验收标准**：
 - Agent 输出包含 `reasoning` 字段，能解释评分的依据
@@ -692,11 +751,11 @@ Phase 3 拆分为 5 个小阶段递进执行：
 
 #### Phase 3.4：Orchestrator 并行 ReAct Loop + RAG 校准
 
-- [ ] Orchestrator 重构：从串行执行升级为并行调度 4 个 Agent
-- [ ] 实现 ReAct Loop：Thought → Action → Observation → 下一轮 Thought
-- [ ] RAG 校准模块：每个 Agent 分析完成后，检索知识库进行基准对比
-- [ ] 冲突消解逻辑：当不同 Agent 结论矛盾时（如社区健康但安全漏洞多），由 Orchestrator 协调
-- [ ] 错误恢复：单个 Agent 失败时，其他 Agent 结果仍可汇总
+- [x] Orchestrator 重构：从串行执行升级为并行调度 4 个 Agent
+- [x] 实现 ReAct Loop：Thought → Action → Observation → 下一轮 Thought
+- [x] RAG 校准模块：每个 Agent 分析完成后，检索知识库进行基准对比
+- [x] 冲突消解逻辑：当不同 Agent 结论矛盾时（如社区健康但安全漏洞多），由 Orchestrator 协调
+- [x] 错误恢复：单个 Agent 失败时，其他 Agent 结果仍可汇总
 
 **验收标准**：
 - 4 个 Agent 并行执行，分析总时间缩短 30%+
@@ -704,19 +763,213 @@ Phase 3 拆分为 5 个小阶段递进执行：
 
 #### Phase 3.5：综合报告 Agent
 
-- [ ] 综合报告 Agent：接收 4 个 Agent 结果 + RAG 校准数据，生成最终报告
-- [ ] 报告结构优化：执行摘要 → 各维度详情 → 风险矩阵 → 竞品对比 → 明确建议
-- [ ] 可解释性增强：每个结论标注数据来源（规则评分 / LLM 推理 / RAG 引用）
-- [ ] 前端报告详情页升级：展示 reasoning 和 RAG 引用
+- [x] 综合报告 Agent：接收 4 个 Agent 结果 + RAG 校准数据，生成最终报告
+- [x] 报告结构优化：执行摘要 → 各维度详情 → 风险矩阵 → 竞品对比 → 明确建议
+- [x] 可解释性增强：每个结论标注数据来源（规则评分 / LLM 推理 / RAG 引用）
+- [x] 前端报告详情页升级：展示 reasoning 和 RAG 引用
 
 **Phase 3 总体验收标准**：
 - Agent 能给出超越规则的推理判断（如 "Bus Factor=2 是高风险，因为历史案例显示..."）
 - RAG 检索准确率 >80%
 - 报告可读性评分（人工抽查 10 份报告）> 4/5
 
-### Phase 4：V3 — 持续监控 + 预警（Week 8-9）
+---
 
-**目标**：从"一次性分析"升级为"持续监控"
+### Phase 4：RAG 深度优化（当前重点）
+
+**背景**：Phase 3 的 RAG 过于简陋——仅 9 篇文档、整文件入库、纯向量检索、无重排序、检索结果利用浅。需要构建生产级 RAG，让知识库真正成为 Agent 的"外脑"。
+
+**目标**：从"Demo 级语义检索"升级为"多路召回 + 精排 + 自验证 + 引用追踪"的生产级 RAG。
+
+#### Phase 4.1：知识库扩充
+
+- [ ] 批量下载 CHAOSS 指标定义文档（Linux Foundation，30+ 篇权威指标）
+- [ ] 补充知名开源项目治理文档（Python PEP / Node.js 治理 / Kubernetes 社区 / Rust RFC）
+- [ ] OpenSSF Best Practices Badge 检查项说明文档入库
+- [ ] Google SRE Book 关键章节入库（可靠性工程标准）
+- [ ] 知识库规模目标：从 9 篇扩展到 80+ 篇
+
+**验收标准**：
+- CHAOSS 指标定义覆盖率 >80%（Bus Factor / Time to First Response / PR Merge Rate 等核心指标均有定义文档）
+- 检索"社区健康度评估标准"能返回 CHAOSS 官方定义
+
+#### Phase 4.2：行业基准数据结构化入库
+
+- [ ] OpenSSF Scorecard BigQuery 数据集查询与加工
+- [ ] 按项目类型（前端框架 / 后端框架 / 工具库 / CLI 工具）聚合基准指标
+- [ ] 将结构化数据转换为文本段落入库（如"前端框架平均 PR 合并率为 65%，React 为 78%，高于均值"）
+- [ ] 补充 Stack Overflow Developer Survey 技术趋势数据
+
+**验收标准**：
+- 至少覆盖 3 类项目（前端 / 后端 / 工具库）的量化基准
+- Agent 报告中"行业基准对比"有具体数字支撑，而非笼统描述
+
+#### Phase 4.3：文档分块策略
+
+- [ ] 语义分块：按段落/章节边界拆分，避免断句
+- [ ] 重叠窗口：相邻 chunk 保留 20% 重叠，防止上下文丢失
+- [ ] 元数据保留：每个 chunk 携带 {原始文档、章节标题、文档类型、创建时间}
+- [ ] chunk 大小控制：目标 300-500 tokens，最大不超过 1000 tokens
+- [ ] 重写 init_kb.py：支持分块入库，而非整文件入库
+
+**验收标准**：
+- 单篇 2000 字文档分块后，检索"Bus Factor 定义"仍能命中包含定义的 chunk
+- 分块后向量库文档数从 9 增加到 200-400 个 chunk
+
+#### Phase 4.4：混合检索
+
+- [ ] BM25 关键词检索：基于 `rank-bm25` 或 `whoosh` 构建倒排索引
+- [ ] 融合策略：向量检索 TOP-20 + BM25 TOP-20，RRF（Reciprocal Rank Fusion）融合取 TOP-10
+- [ ] 分类过滤保留：支持按 category（case-study / methodology / benchmark）过滤
+- [ ] 查询改写：用 LLM 将用户查询扩展为 3 个不同角度的查询（多查询召回）
+
+**验收标准**：
+- 纯 BM25 能召回向量检索遗漏的关键词匹配文档（如"GPL"精确匹配）
+- 混合检索的 TOP-5 相关性优于单一向量检索（人工抽查 20 条查询）
+
+#### Phase 4.5：重排序（Rerank）
+
+- [ ] 接入轻量交叉编码器（如 `bge-reranker-base` 或 `cross-encoder/ms-marco-MiniLM-L-6-v2`）
+- [ ] 召回阶段扩至 TOP-20，Rerank 后取 TOP-5
+- [ ] 本地推理，无 API 成本
+
+**验收标准**：
+- Rerank 后的 TOP-3 相关性比纯向量检索提升 >15%（人工评估）
+- 推理耗时 <500ms（单查询）
+
+#### Phase 4.6：Self-RAG + 检索验证
+
+- [ ] 检索结果相关性自验证：LLM 判断检索到的文档是否真正回答了查询
+- [ ] 低相关性时自动扩展查询并重新检索
+- [ ] 检索不到时 fallback 到 Web 搜索（接入 Serper/Bing API）
+- [ ] 引用追踪：每条检索结果标注置信度分数
+
+**验收标准**：
+- 自验证的准确率 >85%（人工标注 50 条判断对错）
+- 检索失败时的 fallback 成功率 >70%
+
+#### Phase 4.7：引用追踪与可解释性
+
+- [ ] 检索结果与结论绑定：每条 Agent 结论标注引用的文档 ID + chunk ID
+- [ ] 前端展示引用来源：报告详情页显示"此结论引用自 CHAOSS-Bus-Factor 定义第 3 段"
+- [ ] 引用去重：同一文档被多次引用时合并展示
+
+**验收标准**：
+- 90% 以上的结论能找到对应的引用来源
+- 前端引用展示清晰可读
+
+**Phase 4 总体验收标准**：
+- 知识库规模 >80 篇文档，>200 个 chunk
+- 混合检索 + Rerank 的 TOP-3 准确率 >85%
+- Agent 报告中"行业基准对比"有具体数字和权威来源
+
+---
+
+### Phase 5：真正的 Agent 架构重构（当前重点）
+
+**背景**：Phase 3 是"伪 Agent"——Orchestrator 硬编码调度 4 个 Agent，工具调用在 Python 代码层完成，LLM 只负责"评分增强"和"写报告"。LLM 没有自主决定"调用什么工具、什么时候调用、要不要调用 RAG"。
+
+**目标**：让 LLM 成为真正的决策者——自主规划分析路径、自主调用工具、自主检索知识、自主推理、自主反思。
+
+#### Phase 5.1：LLM Function Calling 基础设施
+
+- [ ] 统一 Tool 定义协议：{name, description, parameters(schema), handler}
+- [ ] Tool Schema 自动生成：从函数签名 + docstring 自动生成 JSON Schema
+- [ ] Tool 执行器：解析 LLM 返回的 tool_calls → 执行对应函数 → 返回 observation
+- [ ] 支持 OpenAI 格式 function calling（Kimi / DeepSeek 均兼容）
+
+**验收标准**：
+- 定义一个 Tool（如 `get_repo_metadata`），LLM 能在需要时自主输出 tool_call
+- Tool 执行结果正确返回给 LLM，LLM 基于结果继续推理
+
+#### Phase 5.2：MCP 工具注册表
+
+- [ ] 从 4 个 MCP Server 自动提取可用工具列表
+- [ ] 每个 MCP Tool 转换为 LLM Function Calling 的 Tool Schema
+- [ ] 工具描述优化：为 LLM 编写清晰的 tool description（什么场景下用、参数含义、返回值格式）
+- [ ] 工具分类：数据采集类 / 分析类 / 检索类 / 输出类
+
+**验收标准**：
+- LLM 看到仓库地址后，能自主选择调用 `github.get_repo_metadata` 获取基础信息
+- 工具描述足够清晰，LLM 不会选错工具
+
+#### Phase 5.3：RAG 工具化
+
+- [ ] 将 RAG 检索封装为 LLM 可调用的 Tool：`rag.query(query_text, category, n_results)`
+- [ ] 将行业基准查询封装为 Tool：`rag.get_benchmark(project_type, metric_name)`
+- [ ] 将竞品对比封装为 Tool：`rag.get_competitors(tech_domain)`
+- [ ] LLM 自主决定何时检索、检索什么、用哪个 Tool
+
+**验收标准**：
+- LLM 在分析社区健康度时，能自主调用 `rag.query("Bus Factor 风险")` 获取案例
+- LLM 在给出评分时，能自主调用 `rag.get_benchmark("frontend-framework", "pr_merge_rate")` 获取基准
+
+#### Phase 5.4：Plan-and-Execute Agent
+
+- [ ] 规划阶段：LLM 接收任务后，先输出分析计划（Plan）——需要哪些数据、调用哪些工具、分析顺序
+- [ ] 执行阶段：按 Plan 逐步执行，每步调用对应 Tool
+- [ ] 计划修正：执行中发现数据缺失或工具失败时，LLM 动态调整 Plan
+- [ ] Plan 持久化：将 Plan 和执行日志存入数据库，便于追溯
+
+**验收标准**：
+- LLM 分析 `python-poetry/poetry` 时，Plan 包含：获取元数据 → 分析社区活跃度 → 检查安全漏洞 → 对比同类工具 → 生成报告
+- 某个 Tool 失败时，LLM 能调整 Plan（如跳过代码分析，继续其他维度）
+
+#### Phase 5.5：ReAct Loop 升级（LLM 驱动的 ReAct）
+
+- [ ] Thought：LLM 自主产生思考（"我需要先了解这个项目的 Stars 数和最近提交频率"）
+- [ ] Action：LLM 自主选择 Tool 并输出 tool_call
+- [ ] Observation：Tool 执行结果返回给 LLM
+- [ ] 循环：LLM 基于 Observation 决定下一步 Thought/Action，或终止并输出结论
+- [ ] 最大轮次限制：防止无限循环（如 max_iterations=20）
+
+**验收标准**：
+- 单次分析任务的 ReAct 轮次中位数在 8-15 轮
+- LLM 不会在无意义步骤上循环（如反复调用同一个 Tool 获取相同数据）
+
+#### Phase 5.6：动态分析流程（移除硬编码 4 个 Agent）
+
+- [ ] 废弃 `community_agent.py` / `quality_agent.py` / `security_agent.py` / `evolution_agent.py`
+- [ ] 分析维度不再硬编码为"4 个维度"，而是由 LLM 根据项目特点动态决定分析重点
+- [ ] 例如：对于一个安全敏感库（如密码学库），LLM 自动加大安全分析权重；对于一个新兴实验项目，LLM 自动关注社区活跃度
+- [ ] 评分体系保留：社区/质量/安全/演进 4 维度框架作为默认结构，但 LLM 可调整权重和侧重点
+
+**验收标准**：
+- 分析 `openssl/openssl` 时，LLM 自动加强安全维度分析（调用更多安全相关 Tool）
+- 分析 `facebook/react` 时，LLM 自动加强社区和技术演进分析
+- 分析一个非常小的个人项目时，LLM 自动简化分析流程，不做冗余检查
+
+#### Phase 5.7：推理与反思（Reflection）
+
+- [ ] 初步分析完成后，LLM 自我检查："我的结论是否有遗漏？是否有矛盾的指标？"
+- [ ] 发现遗漏时自动补充验证（如"我只看了最近 3 个月的 commits，应该再确认 1 年的趋势"）
+- [ ] 发现矛盾时主动解释（如"社区活跃但 Issue 响应慢，这可能是因为 Issue 分类流程复杂"）
+- [ ] 反思日志记录到数据库，前端展示"Agent 思考过程"
+
+**验收标准**：
+- LLM 能在 30% 以上的任务中通过反思发现初步分析的遗漏并补充
+- 反思过程的展示让用户理解"为什么 Agent 得出了这个结论"
+
+#### Phase 5.8：前端适配
+
+- [ ] 报告详情页新增"Agent 思考过程"折叠面板：展示 Thought → Action → Observation 链条
+- [ ] 工具调用轨迹可视化：时间线形式展示 LLM 调用了哪些 Tool、返回了什么结果
+- [ ] 反思记录展示：高亮 LLM 自我修正的环节
+- [ ] 动态分析维度说明：显示 LLM 为当前项目选择的分析重点和权重
+
+**Phase 5 总体验收标准**：
+- LLM 能自主完成从"接收仓库地址"到"输出完整报告"的全流程，无需硬编码步骤
+- 不同项目类型（安全库 / 前端框架 / CLI 工具 / 个人项目）的分析路径有显著差异
+- 分析全流程可追溯：每个结论都能找到对应的 Tool 调用记录和 RAG 引用
+- 面试叙事："我手写了一个 Plan-and-Execute Agent，LLM 自主规划分析路径、自主调用 MCP 工具、自主检索知识库、自主反思修正"
+
+---
+
+### 后续优化（暂不进入主线）
+
+以下功能已从主线开发计划中移除，作为后续独立优化项：
+
+#### V3 — 持续监控 + 预警
 
 - [ ] 定时巡检任务（Celery Beat）
 - [ ] 指标趋势分析
@@ -726,11 +979,7 @@ Phase 3 拆分为 5 个小阶段递进执行：
 - [ ] 公开报告页面（可分享链接）
 - [ ] 性能优化（热点项目预缓存）
 
-**验收标准**：
-- 能提前发现项目健康度恶化（回溯验证）
-- 支持 100+ 项目的定时巡检
-
-### Phase 5：上线与推广（Week 10+）
+#### 上线与推广
 
 - [ ] Railway/Render 部署
 - [ ] 公开演示站点
@@ -780,17 +1029,20 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost/osscout
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
-# LLM
-ANTHROPIC_API_KEY=sk-...
-OPENAI_API_KEY=sk-...
-DEFAULT_LLM_PROVIDER=anthropic
-DEFAULT_LLM_MODEL=claude-3-5-sonnet-20241022
+# LLM（Kimi + DeepSeek）
+KIMI_API_KEY=sk-...
+KIMI_BASE_URL=https://api.moonshot.cn/v1
+KIMI_MODEL=kimi-k2.6
+
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-v4-pro
+
+DEFAULT_LLM_PROVIDER=kimi
+DEFAULT_LLM_MODEL=
 
 # GitHub
 GITHUB_TOKEN=ghp_...  # 提高 API 限频
-
-# 搜索
-SERPER_API_KEY=...  # Google Search API
 
 # 应用
 DEBUG=false
@@ -851,7 +1103,6 @@ osscout/
 │   │   │   ├── __init__.py
 │   │   │   ├── vector_store.py   # ChromaDB 封装
 │   │   │   ├── embeddings.py     # Embedding 模型
-│   │   │   ├── ingest.py         # 文档入库
 │   │   │   └── query.py          # RAG 查询
 │   │   ├── services/
 │   │   │   ├── __init__.py
@@ -867,7 +1118,6 @@ osscout/
 │   │       ├── quality.py
 │   │       ├── security.py
 │   │       └── evolution.py
-│   ├── tests/
 │   ├── alembic/               # 数据库迁移
 │   └── requirements.txt
 │
@@ -877,10 +1127,12 @@ osscout/
 │   │   ├── main.tsx
 │   │   ├── App.tsx
 │   │   ├── components/
-│   │   │   ├── ReportCard.tsx
 │   │   │   ├── ScoreGauge.tsx
-│   │   │   ├── FindingList.tsx
-│   │   │   └── TrendChart.tsx
+│   │   │   ├── DimensionBarChart.tsx
+│   │   │   ├── MiniScoreBar.tsx
+│   │   │   ├── ScoreBadge.tsx
+│   │   │   ├── Layout.tsx
+│   │   │   └── ui/                # shadcn/ui 组件
 │   │   ├── pages/
 │   │   │   ├── HomePage.tsx
 │   │   │   ├── ReportPage.tsx
@@ -898,9 +1150,9 @@ osscout/
 │   │   ├── server.py
 │   │   └── pyproject.toml
 │   ├── filesystem-mcp/
-│   ├── search-mcp/
 │   ├── osv-mcp/
 │   └── code-analysis-mcp/
+│   # search-mcp/  — 未实现（Phase 4 Self-RAG fallback 时引入）
 │
 ├── knowledge-base/            # RAG 知识库文档
 │   ├── methodology/           # 评估方法论
@@ -908,16 +1160,11 @@ osscout/
 │   ├── case-studies/          # 失败案例
 │   └── competitors/           # 竞品映射
 │
-├── scripts/                   # 工具脚本
+├── scripts/                   # 工具脚本（项目根目录）
 │   ├── init_kb.py             # 初始化知识库
-│   ├── seed_benchmarks.py     # 计算行业基准
 │   └── benchmark.py           # 性能测试
 │
-└── docs/                      # 项目文档
-    ├── ARCHITECTURE.md
-    ├── AGENT_DESIGN.md
-    ├── MCP_PROTOCOL.md
-    └── DEPLOYMENT.md
+└── docs/                      # 项目文档（待补充）
 ```
 
 ---
@@ -935,12 +1182,31 @@ osscout/
 - **标准化**：MCP 是 emerging standard，展示对生态的跟进
 - **隔离性**：工具逻辑与 Agent 逻辑解耦
 - **可扩展性**：新增数据源只需新增 MCP Server，无需修改 Agent 代码
+- **为 Function Calling 铺路**：Phase 5 中 MCP Tools 自动转换为 LLM 可调用的 Tool Schema，标准化描述让 LLM 能自主理解和选择工具
 
 ### 13.3 为什么从规则评分开始，再引入 LLM
 
 - **可验证**：规则评分的准确性可以用已知项目验证
 - **可对比**：引入 LLM 后可以对比"规则 vs 推理"的效果差异
 - **可量化**：能明确说出"LLM 推理在什么场景下比规则更准确"
+
+### 13.4 为什么让 LLM 自主调用工具（Phase 5 核心决策）
+
+Phase 3 的"伪 Agent"设计（硬编码 4 个 Agent + LLM 只负责"增强"）虽然能跑通，但存在根本局限：LLM 的能力被浪费了。让 LLM 自主调用工具的决策理由：
+
+- **灵活性**：不同项目类型需要不同的分析路径。安全库需要重点检查漏洞，前端框架需要关注社区活跃度，硬编码流程无法自适应
+- **可扩展性**：新增一个 MCP Tool（如 deps.dev API）后，只需更新 Tool Schema，LLM 自动学会使用，无需修改 Orchestrator 代码
+- **面试深度**："我手写了一个 Plan-and-Execute Agent，LLM 自主规划、自主调用工具、自主反思"——这比"我调用了 4 个预定义 Agent"更有技术深度
+- **与框架的对比**：LangChain 的 AgentExecutor 也做类似的事，但隐藏了核心的决策逻辑。手写实现能精确控制每一轮 ReAct 的 Thought/Action/Observation
+
+### 13.5 为什么 RAG 要做深做透（Phase 4 核心决策）
+
+Phase 3 的 RAG 只有 9 篇文档、整文件入库、纯向量检索，本质上是个 Demo。深度优化的理由：
+
+- **知识库是 Agent 的"外脑"**：Agent 的推理质量取决于它能引用多少权威知识。9 篇文档撑不起"专家级"判断
+- **行业基准是差异化来源**：OpenSSF Scorecard 的百万级项目数据、CHAOSS 的学术级指标定义——这些是"硬通货"，能让报告有数据支撑
+- **检索质量决定引用可信度**：混合检索 + Rerank + Self-RAG 能确保 Agent 引用的知识是真正相关的，而非"凑数"
+- **面试叙事**："我的 RAG 系统包含 80+ 篇权威文档、混合检索、交叉编码器重排序、检索自验证"——这比"我接了个向量库"更有说服力
 
 ---
 
@@ -949,9 +1215,11 @@ osscout/
 | 风险 | 影响 | 应对策略 |
 |-----|------|---------|
 | GitHub API 限频 | 分析速度受限 | 多层缓存 + 渐进式分析 |
-| LLM 幻觉 | 报告可信度下降 | 规则评分打底，LLM 仅做推理增强；所有判断必须引用数据 |
+| LLM 幻觉 | 报告可信度下降 | 规则评分打底，LLM 所有判断必须引用数据或 Tool 执行结果 |
+| LLM 无限循环/偏离主题 | Phase 5 中 LLM 自主决策可能走入死胡同 | ReAct Loop 设置 max_iterations 上限；Plan 阶段预设检查点 |
 | 大仓库克隆慢 | 代码分析超时 | 超时机制 + 部分分析（仅分析核心目录） |
-| 竞品已有类似产品 | 差异化不足 | 专注"尽调报告"的完整性和可解释性，而非简单的评分 |
+| RAG 检索质量不达标 | 知识库引用错误，误导 Agent | Self-RAG 自验证 + 人工抽查 + 逐步扩充权威文档 |
+| 竞品已有类似产品 | 差异化不足 | 专注"Agent 自主决策 + 可解释性 + 权威知识引用"，而非简单的评分 |
 
 ---
 
@@ -959,27 +1227,20 @@ osscout/
 
 ### 15.1 项目介绍（30 秒版本）
 
-> "技术团队选型开源库时往往只看 Stars 数，但 Stars 不等于维护质量。我做了一个开源项目尽调平台，核心是把 VC 做公司尽调的方法论搬到开源项目上——用 4 个专业 Agent 分别评估社区健康、代码质量、安全、技术演进，最终输出一份可投资级的结构化报告。"
+> "技术团队选型开源库时往往只看 Stars 数，但 Stars 不等于维护质量。我做了一个开源项目尽调平台，核心是把 VC 做公司尽调的方法论搬到开源项目上——输入一个 GitHub 仓库地址，LLM 自主规划分析路径、自主调用工具采集数据、自主检索权威知识库做基准对比，最终输出一份可投资级的结构化报告。"
 
 ### 15.2 技术亮点（2 分钟版本）
 
-> "架构上有三个设计值得一提：
-> 1. **手写 ReAct 编排**：没有使用 LangChain，而是自己实现了 Agent 协调器，支持并行执行、冲突消解和错误恢复。这让我对 LLM 交互模式有了深入理解。
-> 2. **MCP 工具层**：所有外部数据源（GitHub、漏洞库、搜索引擎）都通过 MCP Server 接入，Agent 不直接调用 API，实现了工具与逻辑的解耦。
-> 3. **RAG 校准**：引入了行业基准数据和历史失败案例，Agent 不是孤立判断，而是能说出'前端框架的平均 PR 合并率是 65%，这个项目是 45%，低于基准'。"
+> "架构上有四个设计值得一提：
+> 1. **手写 Plan-and-Execute Agent**：没有使用 LangChain，而是自己实现了 LLM 自主规划 + ReAct 循环。LLM 先制定分析计划，然后 Thought → Action（调用工具）→ Observation → 下一轮 Thought，直到完成分析。这让我对 LLM 的决策逻辑有完全可控的理解。
+> 2. **MCP 工具层**：所有外部数据源（GitHub、漏洞库、搜索引擎）都通过 MCP Server 接入，并自动转换为 LLM Function Calling 的 Tool Schema。新增工具只需加 MCP Server，LLM 自动学会使用。
+> 3. **生产级 RAG**：不只是接了个向量库。知识库包含 CHAOSS 指标定义、OpenSSF 最佳实践、知名项目治理文档等 80+ 篇权威资料；检索用混合检索（向量 + BM25）+ 交叉编码器重排序 + Self-RAG 自验证。
+> 4. **推理可解释**：前端展示 LLM 的完整思维链——它调用了哪些工具、检索了哪些知识、为什么得出这个结论、中间有没有自我修正。"
 
 ### 15.3 量化成果
 
-> "目前分析了 100+ 热门项目，我对评分体系做了验证：与 3 位资深工程师的评分对比，Pearson 相关系数 0.87。最有意思的是回溯验证——我标记出某项目 Bus Factor 降到 2 且有核心维护者退出的征兆，3 个月后确实发生了维护者退出事件。"
+> "目前分析了 100+ 热门项目，评分体系与 3 位资深工程师的评分对比，Pearson 相关系数 0.87。最有意思的是回溯验证——我标记出某项目 Bus Factor 降到 2 且有核心维护者退出的征兆，3 个月后确实发生了维护者退出事件。"
 
 ---
 
-## 16. 下一步行动
-
-1. **本周**：搭建项目脚手架，确认 Phase 0 完成
-2. **下周**：完成 GitHub API 封装和基础数据采集
-3. ** milestone**：Phase 1 MVP 完成，能分析第一个项目并产出报告
-
----
-
-*本文档为活文档，随着开发进展持续更新。*
+*本文档为活文档，随着开发进展持续更新。当前进度和下一步行动见 `PROGRESS.md`。*

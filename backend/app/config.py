@@ -37,12 +37,12 @@ class Settings(BaseSettings):
     # Kimi (Moonshot AI) 配置
     kimi_api_key: str = ""
     kimi_base_url: str = "https://api.moonshot.cn/v1"
-    kimi_model: str = "moonshot-v1-8k"
+    kimi_model: str = "kimi-k2.6"
 
     # DeepSeek 配置
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-pro"
 
     # 默认使用的 LLM Provider
     default_llm_provider: str = "kimi"  # 可选: kimi / deepseek
@@ -50,9 +50,6 @@ class Settings(BaseSettings):
 
     # === GitHub ===
     github_token: str = ""  # 用于提高 API 限频
-
-    # === 搜索 ===
-    serper_api_key: str = ""  # Google Search API
 
 
 # 全局配置实例，按需导入使用

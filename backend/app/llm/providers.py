@@ -136,6 +136,7 @@ class KimiProvider(_OpenAICompatibleProvider):
     兼容 OpenAI API 格式，base_url 为 https://api.moonshot.cn/v1
 
     可用模型：
+    - kimi-k2.6        : 思考模型，适合深度分析（强制 temperature=0.6）
     - moonshot-v1-8k   : 8K 上下文，适合简单任务
     - moonshot-v1-32k  : 32K 上下文，适合中等长度分析
     - moonshot-v1-128k : 128K 上下文，适合长文本分析
@@ -191,6 +192,7 @@ class DeepSeekProvider(_OpenAICompatibleProvider):
     兼容 OpenAI API 格式，base_url 为 https://api.deepseek.com/v1
 
     可用模型：
+    - deepseek-v4-pro  : 深度推理模型，适合复杂分析任务
     - deepseek-chat    : 通用对话模型，适合大多数分析任务
     - deepseek-reasoner: 推理模型，适合需要深度思考的场景
     """
