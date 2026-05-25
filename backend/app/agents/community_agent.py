@@ -37,7 +37,7 @@ class CommunityAgent:
     - 活跃贡献者数量
     - Release 稳定性
 
-    Phase 3.3 增强：在规则评分基础上接入 LLM 推理，
+    在规则评分基础上接入 LLM 推理，
     增加 reasoning 字段和跨指标的关联分析。
     """
 

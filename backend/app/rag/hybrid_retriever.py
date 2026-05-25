@@ -196,7 +196,7 @@ class HybridRetriever:
             bm25_index: BM25 索引实例，None 时自动从 vector_store 构建
             rrf_k: RRF 融合常数
             reranker: 重排序器实例，None 时根据 enable_rerank 自动创建
-            enable_rerank: 是否启用重排序（Phase 4.5）
+            enable_rerank: 是否启用重排序
         """
         if vector_store is None:
             vector_store = VectorStore(collection_name="osscout_kb")
@@ -208,7 +208,7 @@ class HybridRetriever:
 
         self.rrf_k = rrf_k
 
-        # Phase 4.5：重排序器
+        # 重排序器
         self._reranker = reranker
         self._enable_rerank = enable_rerank
         if enable_rerank and reranker is None:
@@ -271,7 +271,7 @@ class HybridRetriever:
         # 3. RRF 融合
         fused = self._rrf_fuse(vector_results, bm25_results)
 
-        # 4. Phase 4.5：交叉编码器重排序
+        # 4. 交叉编码器重排序
         if self._reranker is not None and len(fused) > 0:
             # 重排序候选数：至少 n_results 个，最多 20 个
             rerank_candidates = fused[:max(n_results, 20)]

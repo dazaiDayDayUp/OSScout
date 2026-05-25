@@ -58,6 +58,18 @@ export interface CalibrationItem {
     source_file: string
   }
   distance: number
+  citation?: Citation
+}
+
+/** 引用来源（Phase 4.7） */
+export interface Citation {
+  source_type: 'kb' | 'web' | 'benchmark'
+  document_id: string
+  title: string
+  category: string | null
+  url: string | null
+  snippet: string
+  confidence: number | null
 }
 
 /** 综合报告中的风险项 */
@@ -126,6 +138,8 @@ export interface ReportResponse {
   conflicts: string[]
   react_summary: string
   synthesis: SynthesisReport | Record<string, never>
+  // Phase 4.7 新增字段
+  citations: Citation[]
   created_at: string | null
 }
 

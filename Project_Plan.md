@@ -1,8 +1,8 @@
 # 开源项目深度尽调 Agent — 构建方案
 
-> 版本：v1.0  
-> 日期：2026-05-15  
-> 状态：规划中
+> 版本：v1.1  
+> 日期：2026-05-25  
+> 状态：Phase 4 已完成，Phase 5 进行中
 
 ---
 
@@ -14,11 +14,7 @@
 
 ### 1.1 为什么做这个项目
 
-技术团队选型开源库时面临的信息不对称：
-- Stars 数不等于维护质量（如 `left-pad` 事件前 stars 很高）
-- 安全问题往往在出事前几个月已有征兆（依赖老化、核心维护者退出）
-- 人工尽调耗时（一个项目需要 2-4 小时），无法覆盖候选库清单
-- 现有工具（OpenSSF Scorecard、Snyk）偏规则评分，缺乏推理和上下文判断
+技术团队选型开源库时面临的信息不对称：Stars 不等于维护质量（如 left-pad 事件）；安全问题往往在出事前已有征兆；人工尽调耗时（2-4 小时/项目）；现有工具偏规则评分，缺乏推理能力。
 
 ### 1.2 核心差异化
 
@@ -96,21 +92,21 @@
 ```
 1. 用户提交 repo URL
 2. Orchestrator 解析仓库标识（owner/repo）
-3. 并行触发数据采集：
-   a. GitHub MCP 采集元数据（stars/forks/issues/PRs/commits/contributors/releases）
-   b. Filesystem MCP 克隆仓库到本地
-   c. OSV MCP 查询已知漏洞
-   d. search-mcp 检索项目相关新闻（Phase 5）
-4. 数据就绪后，并行调度 4 个分析 Agent
-5. 各 Agent 调用 RAG 知识库进行基准校准（Phase 4 完整流程）：
+3. 并行调度 4 个分析 Agent（每个 Agent 自行采集所需数据并分析）：
+   a. 社区健康 Agent：GitHub API 采集 contributors / issues / PRs / releases
+   b. 代码质量 Agent：Filesystem MCP 克隆仓库 → Semgrep + radon 静态分析
+   c. 安全分析 Agent：OSV MCP 查询漏洞 + 检查许可证
+   d. 技术演进 Agent：GitHub API 采集版本历史 + commit 活跃度
+4. 各 Agent 产出结构化分析结果（含评分 + findings + risks + reasoning）
+5. Orchestrator 对各维度结果进行 RAG 校准（Phase 4 完整流程）：
    a. 语义检索：向量检索 TOP-20 + BM25 TOP-20 → RRF 融合
    b. 重排序：CrossEncoder 对候选精细打分 → TOP-5
    c. Self-RAG 验证：LLM 判断相关性 → 不通过则查询扩展/Web fallback
-   d. 返回带引用的校准数据（来源文档 + chunk ID）
-6. 各 Agent 产出结构化分析结果（含 reasoning + RAG 引用）
-7. Orchestrator 汇总，冲突消解
-8. 综合报告 Agent 生成最终尽调报告
-9. 报告持久化，推送给用户
+   d. 返回带引用的校准数据（来源文档 + chunk ID + Citation）
+   e. OpenSSF Scorecard 基准数据通过 category="benchmark" 的向量库文档体现
+6. Orchestrator 汇总 Agent 结果 + RAG 校准数据，冲突消解
+7. 综合报告 Agent 生成最终尽调报告
+8. 报告持久化，推送给用户
 ```
 
 ---
@@ -138,49 +134,6 @@
 | 静态分析 | Semgrep + radon | 代码漏洞扫描 + 复杂度分析 |
 | 前端 | React 18 + TailwindCSS + Recharts | 轻量、指标可视化 |
 | 部署 | Docker Compose + Railway/Render | 低成本上线，可迁移至 K8s |
-
-### 3.2 关键依赖
-
-```
-# 核心框架
-fastapi==0.115.*
-uvicorn[standard]
-pydantic==2.10.*
-pydantic-settings
-
-# Agent & LLM
-anthropic>=0.40.0
-openai>=1.60.0
-httpx>=0.27.0
-
-# MCP
-mcp>=1.0.0
-
-# RAG
-chromadb>=0.6.0
-sentence-transformers>=3.0.0
-rank-bm25>=0.2.0  # Phase 4.4: BM25 混合检索
-
-# 数据库 & 缓存
-sqlalchemy[asyncio]>=2.0.0
-asyncpg>=0.30.0
-alembic>=1.14.0
-redis>=5.0.0
-
-# 任务队列
-celery[redis]>=5.4.0
-
-# 代码分析
-semgrep>=1.100.0
-radon>=6.0.0
-pygithub>=2.5.0
-
-# 工具
-python-dotenv
-structlog
-pytest
-pytest-asyncio
-```
 
 ### 3.3 为什么不用 LangChain/LangGraph
 
@@ -259,86 +212,17 @@ pytest-asyncio
 
 ### 4.2 Orchestrator 协调逻辑（Phase 3 版本，Phase 5 重构为 LLM 自主驱动）
 
-**Phase 3 实现（当前）**：硬编码并行调度 4 个 Agent
+**Phase 3（当前）**：硬编码并行调度 4 个 Agent，LLM 只负责"评分增强"和"写报告"。
 
-```python
-class DueDiligenceOrchestrator:
-    async def analyze(self, repo_url: str) -> DueDiligenceReport:
-        # 1. 解析仓库信息
-        owner, repo = parse_repo_url(repo_url)
+**Phase 5（目标）**：LLM 自主规划 → 自主调用工具 → 自主推理。
 
-        # 2. 并行数据采集
-        metadata, local_repo, security_data = await asyncio.gather(
-            self.collect_github_metadata(owner, repo),
-            self.clone_and_analyze_code(owner, repo),
-            self.collect_security_data(owner, repo),
-        )
+核心流程：
+1. **Plan**：LLM 制定分析计划（需要哪些数据、调用哪些工具、分析顺序）
+2. **ReAct Loop**：Thought → Action（tool_call）→ Observation → 下一轮 Thought
+3. **Reflection**：分析完成后自我检查，发现遗漏则补充验证
+4. **Report**：生成最终尽调报告
 
-        # 3. 并行调度 4 个分析 Agent
-        results = await asyncio.gather(
-            self.community_agent.analyze(metadata),
-            self.quality_agent.analyze(local_repo),
-            self.security_agent.analyze(security_data),
-            self.evolution_agent.analyze(metadata, local_repo),
-        )
-
-        # 4. RAG 校准：检索历史基准和类似案例
-        calibration = await self.rag_calibrate(results)
-
-        # 5. 综合报告生成
-        report = await self.synthesis_agent.generate(
-            results, calibration
-        )
-
-        return report
-```
-
-**Phase 5 目标（重构后）**：LLM 自主规划 → 自主调用工具 → 自主推理
-
-```python
-class AutonomousAgent:
-    async def analyze(self, repo_url: str) -> DueDiligenceReport:
-        # 1. LLM 制定分析计划（Plan）
-        plan = await self.llm.plan(
-            task=f"分析仓库 {repo_url} 的开源健康度",
-            available_tools=self.tool_registry.list(),
-        )
-        # plan 示例：
-        # ["get_repo_metadata", "list_contributors", "rag.query:社区健康标准",
-        #  "clone_repo", "run_code_analysis", "rag.query:代码质量基准",
-        #  "check_osv_vulnerabilities", "rag.query:安全漏洞案例", "generate_report"]
-
-        # 2. ReAct Loop：按 Plan 逐步执行
-        observations = []
-        for step in plan.steps:
-            # Thought：LLM 决定下一步 Action
-            thought = await self.llm.think(observations)
-
-            # Action：LLM 输出 tool_call（自主决定调用哪个工具、传什么参数）
-            action = await self.llm.decide_action(thought, self.tool_registry)
-
-            # Observation：执行工具，返回结果
-            result = await self.tool_executor.run(action)
-            observations.append({"thought": thought, "action": action, "result": result})
-
-            # 可选：LLM 自主决定是否需要 RAG 检索来验证结论
-            if await self.llm.needs_calibration(observations):
-                rag_results = await self.rag_tool.query(
-                    await self.llm.formulate_rag_query(observations)
-                )
-                observations.append({"rag_results": rag_results})
-
-        # 3. Reflection：分析完成后自我检查
-        reflection = await self.llm.reflect(observations)
-        if reflection.has_gaps:
-            # 发现遗漏，补充验证
-            additional_obs = await self.execute_additional_steps(reflection.missing_checks)
-            observations.extend(additional_obs)
-
-        # 4. 生成最终报告
-        report = await self.llm.generate_report(observations)
-        return report
-```
+**关键区别**：
 
 **关键区别**：
 | | Phase 3（当前） | Phase 5（目标） |
@@ -364,17 +248,9 @@ class AutonomousAgent:
 | `osv-mcp` | stdio | 查询开源漏洞数据库 | 自研 |
 | `code-analysis-mcp` | stdio | 运行 Semgrep、radon、计算覆盖率 | 自研 |
 
-### 5.2 MCP Server 接口设计（以 github-mcp 为例）
+### 5.2 MCP Server 接口示例（github-mcp）
 
-```typescript
-// tools
-- get_repo_metadata(owner: string, repo: string) -> RepoMetadata
-- list_contributors(owner: string, repo: string, limit: number) -> Contributor[]
-- list_issues(owner: string, repo: string, state: string, since: string) -> Issue[]
-- list_pull_requests(owner: string, repo: string, state: string) -> PR[]
-- list_releases(owner: string, repo: string) -> Release[]
-- get_commit_activity(owner: string, repo: string) -> WeeklyCommitActivity[]  // 实际调用 /stats/participation 端点，避免 /stats/commit_activity 的 202 异步计算问题
-```
+`get_repo_metadata`、`list_contributors`、`list_issues`、`list_pull_requests`、`list_releases`、`get_commit_activity`
 
 ### 5.3 GitHub API 限频策略
 
@@ -429,8 +305,8 @@ class AutonomousAgent:
    ├── 不通过 → 查询扩展（LLM 生成 3 个扩展查询）→ 重新检索 → 再验证
    └── 仍不通过 → Web 搜索 fallback（Serper API）
    ↓
-[阶段 5] 引用追踪（Phase 4.7，待实现）
-   └── 每条结论标注来源文档 ID + chunk ID + 段落
+[阶段 5] 引用追踪（Phase 4.7，已完成）
+   └── 统一 Citation 模型：KB / Web / Benchmark 三类来源去重汇总
    ↓
      返回 Agent
 ```
@@ -598,324 +474,34 @@ POST   /api/v1/compare              # 多项目对比分析
 GET    /api/v1/repos/{repo_id}/reports  # 获取某仓库的所有报告
 ```
 
-### 9.2 分析任务接口
+### 9.2 请求/响应格式
 
-```http
-POST /api/v1/analyze
-Content-Type: application/json
-
-{
-  "repo_url": "https://github.com/vercel/next.js",
-  "options": {
-    "include_code_analysis": true,
-    "include_security_scan": true,
-    "compare_with": ["nuxt/nuxt", "remix-run/remix"]
-  }
-}
-
-Response: 202 Accepted
-{
-  "task_id": "task_abc123",
-  "status": "pending",
-  "estimated_seconds": 120
-}
-```
-
-### 9.3 报告接口
-
-```http
-GET /api/v1/reports/report_xyz789
-
-Response: 200 OK
-{
-  "repo": {
-    "owner": "vercel",
-    "repo": "next.js",
-    "url": "https://github.com/vercel/next.js"
-  },
-  "overall": {
-    "score": 92,
-    "rating": "A+",
-    "summary": "强烈推荐使用"
-  },
-  "dimensions": {
-    "community": { "score": 28, "max": 30, "findings": [...] },
-    "quality": { "score": 23, "max": 25, "findings": [...] },
-    "security": { "score": 25, "max": 25, "findings": [...] },
-    "evolution": { "score": 16, "max": 20, "findings": [...] }
-  },
-  "comparison": {
-    "vs_nuxt": { "next.js": 92, "nuxt": 85 },
-    "vs_remix": { "next.js": 92, "remix": 78 }
-  },
-  "recommendations": [
-    "项目非常健康，社区活跃，可放心使用",
-    "关注 v14 到 v15 的迁移成本"
-  ],
-  "created_at": "2026-05-15T10:30:00Z"
-}
-```
+`POST /api/v1/analyze` 提交分析任务，返回 `task_id`。
+`GET /api/v1/reports/{report_id}` 获取完整报告（含评分、findings、RAG 引用、冲突检测）。
 
 ---
 
 ## 10. 开发路线图
 
-### Phase 0：基础设施（Week 1）
+### Phase 0：基础设施（已完成）
 
-- [x] 项目脚手架搭建（FastAPI + SQLAlchemy + Alembic）
-- [x] Docker Compose 开发环境
-- [x] 数据库 Schema 设计与迁移
-- [x] GitHub API 封装（带限频和缓存）
-- [x] 基础日志和错误处理
+FastAPI + SQLAlchemy + Alembic 脚手架、Docker Compose 开发环境、数据库 Schema、GitHub API 封装。
 
-### Phase 1：MVP — 单项目分析（Week 2-3）
+### Phase 1：MVP — CLI 单项目分析（已完成）
 
-**目标**：CLI 运行，输入 repo URL，输出文本报告
+4 个分析 Agent（规则评分）、基础 Orchestrator（串行执行）、CLI 文本报告、5 个热门项目基准测试。
 
-- [x] github-mcp server 实现
-- [x] filesystem-mcp server 实现（仓库克隆）
-- [x] 社区健康度 Agent（纯规则评分，无 LLM）
-- [x] 代码质量 Agent（Semgrep + radon 集成）
-- [x] 安全分析 Agent（OSV 查询 + 许可证检查）
-- [x] 基础 Orchestrator（串行执行）
-- [x] 文本格式报告生成
-- [x] 5 个热门项目的基准测试
+### Phase 2：V1 — Web 平台 + 多项目（已完成）
 
-**验收标准**：
-- 能完整分析 `vercel/next.js`、`python-poetry/poetry` 等项目
-- 分析时间 <5 分钟
-- 输出包含 4 个维度的评分和关键发现
+REST API（FastAPI）、Celery 异步任务队列、React 前端（Vite + TailwindCSS + shadcn/ui）、多项目对比、历史趋势接口。
 
-### Phase 2：V1 — Web 平台 + 多项目（Week 4-5）
+### Phase 3：V2 — Agent 智能化 + RAG 初版（已完成）
 
-**目标**：Web UI + API + 异步任务 + 数据持久化
+LLM Provider 封装（Kimi / DeepSeek）、ChromaDB 向量库（9 篇文档）、4 个 Agent 接入 LLM 推理增强（含 reasoning）、并行 Orchestrator + RAG 校准、综合报告 Agent。
 
-Phase 2 拆分为 5 个小阶段递进执行：
+### Phase 4：RAG 深度优化（已完成）
 
-#### Phase 2.1：REST API 骨架 + 数据库持久化
-
-- [x] `POST /api/v1/analyze` — 提交分析任务，返回 task_id
-- [x] `GET /api/v1/tasks/{task_id}` — 查询任务状态
-- [x] `GET /api/v1/reports/{report_id}` — 获取报告详情
-- [x] 分析结果写入 PostgreSQL（AnalysisTask / DueDiligenceReport）
-- [x] **此阶段任务同步执行**（类似 CLI），接口已设计成异步风格
-
-**验收标准**：
-- curl/Postman 可完整调用：提交 → 查询状态 → 获取报告
-- 数据能在 DataGrip 中查到
-
-#### Phase 2.2：Celery 异步任务队列
-
-- [x] Celery 应用配置（Redis broker）
-- [x] `run_due_diligence` 异步任务
-- [x] `/api/v1/analyze` 改为"提交 Celery 任务 + 立即返回 task_id"
-- [ ] docker-compose.dev.yml 启用 worker 服务（后续优化阶段统一配置）
-
-**验收标准**：
-- 提交任务后立即返回，不阻塞 HTTP 响应
-- worker 日志可见任务执行过程
-- 超大仓库分析不触发 HTTP 超时
-
-#### Phase 2.3：多项目对比 + 历史趋势接口
-
-- [x] `POST /api/v1/compare` — 批量提交多个仓库，返回对比报告
-- [x] `GET /api/v1/repos/{id}/history` — 某仓库历次分析的指标趋势
-- [x] 报告列表查询（分页）
-
-**验收标准**：
-- 支持同时对比 2-3 个仓库
-- 历史趋势接口返回时序数据
-
-#### Phase 2.4：React 前端骨架
-
-- [x] HTTP 客户端封装（Axios + TanStack Query）
-- [x] 首页：提交分析表单 + 任务状态轮询
-- [x] 报告详情页：四维评分展示
-- [x] 报告列表页：分页表格
-- [x] 路由配置（React Router v7）
-- [x] Vite dev server 代理配置（解决 CORS）
-
-**技术栈**：Vite 6 + React 19 + TypeScript 5.8 + TailwindCSS v4 + shadcn/ui + React Router v7 + TanStack Query v5
-
-**验收标准**：
-- 浏览器可提交分析、查看报告
-- 前端调用真实 API，非 mock 数据
-
-#### Phase 2.5：前端可视化
-
-- [x] 评分仪表盘组件（环形图）
-- [x] 各维度评分条形图
-- [x] 对比页面（并排展示多项目）
-- [x] 仓库列表页（历史分析记录）
-
-**验收标准**：
-- Web UI 可浏览报告、查看可视化评分
-- 对比页面并排展示多项目数据
-
-**Phase 2 总体验收标准**：
-- 完整链路：前端提交 → API 接收 → Celery 执行 → 数据库存储 → 前端展示
-- 支持批量提交分析任务
-- API 响应时间 <200ms（缓存命中）
-
-### Phase 3：V2 — Agent 智能化 + RAG（Week 6-7）
-
-**目标**：引入 LLM 推理和知识库，让分析从"规则评分"升级为"数据驱动 + 推理增强"
-
-Phase 3 拆分为 5 个小阶段递进执行：
-
-#### Phase 3.1：LLM Client 封装
-
-- [x] 抽象 LLM Provider 接口（统一封装 Kimi / DeepSeek 的调用差异）
-- [x] 实现 Kimi Provider（Moonshot AI，兼容 OpenAI API 格式）
-- [x] 实现 DeepSeek Provider（兼容 OpenAI API 格式）
-- [x] 配置化切换（通过环境变量 `DEFAULT_LLM_PROVIDER`）
-- [x] Prompt 模板基础设施（f-string 模板管理）
-- [x] 结构化输出接口（Prompt 工程 + JSON 解析 + Pydantic 校验）
-- [x] 验证：两个 Provider 均可正常调用
-
-**验收标准**：
-- [x] 同一套 Prompt 输入，Kimi 和 DeepSeek 都能返回格式一致的 JSON
-- [x] Provider 切换无需修改业务代码
-- [x] Kimi k2.6 思考模型自动修正 temperature=1.0（模型强制限制）
-
-#### Phase 3.2：ChromaDB 向量库 + 知识库文档入库
-
-- [x] ChromaDB 本地部署（Python 嵌入式，无需额外服务）
-- [x] Embedding 模型接入（`all-MiniLM-L6-v2`，本地推理）
-- [x] 评估方法论文档分块入库（OpenSSF Scorecard 标准、CNCF 毕业标准等）
-- [x] 失败案例库入库（left-pad、Faker.js、colors.js、event-stream 等）
-- [x] 竞品映射文档入库（常见选型场景的竞品关系）
-- [x] 向量检索封装（`rag/vector_store.py` + `rag/query.py`）
-
-**验收标准**：
-- 能执行语义检索："Bus Factor 低的风险" → 返回 left-pad 等失败案例
-- 检索 TOP-3 结果的相关性经人工抽查 >80%
-
-#### Phase 3.3：4 个分析 Agent 接入 LLM 推理
-
-- [x] 社区健康 Agent：规则评分打底 + LLM 推理增强（判断"即将放弃维护"信号）
-- [x] 代码质量 Agent：规则评分打底 + LLM 推理增强（判断文档质量、架构合理性）
-- [x] 安全分析 Agent：规则评分打底 + LLM 推理增强（判断漏洞影响面、修复优先级）
-- [x] 技术演进 Agent：规则评分打底 + LLM 推理增强（判断技术栈老化风险）
-- [x] 每个 Agent 输出格式统一：评分 + findings（含 reasoning 字段）+ 风险标记
-
-**验收标准**：
-- Agent 输出包含 `reasoning` 字段，能解释评分的依据
-- 对比纯规则评分，LLM 增强后能发现规则无法捕捉的问题（如"虽然 PR 合并率 60%，但最近 3 个月核心维护者减少了 2 人"）
-
-#### Phase 3.4：Orchestrator 并行 ReAct Loop + RAG 校准
-
-- [x] Orchestrator 重构：从串行执行升级为并行调度 4 个 Agent
-- [x] 实现 ReAct Loop：Thought → Action → Observation → 下一轮 Thought
-- [x] RAG 校准模块：每个 Agent 分析完成后，检索知识库进行基准对比
-- [x] 冲突消解逻辑：当不同 Agent 结论矛盾时（如社区健康但安全漏洞多），由 Orchestrator 协调
-- [x] 错误恢复：单个 Agent 失败时，其他 Agent 结果仍可汇总
-
-**验收标准**：
-- 4 个 Agent 并行执行，分析总时间缩短 30%+
-- RAG 校准输出包含"行业基准对比"和"历史案例引用"
-
-#### Phase 3.5：综合报告 Agent
-
-- [x] 综合报告 Agent：接收 4 个 Agent 结果 + RAG 校准数据，生成最终报告
-- [x] 报告结构优化：执行摘要 → 各维度详情 → 风险矩阵 → 竞品对比 → 明确建议
-- [x] 可解释性增强：每个结论标注数据来源（规则评分 / LLM 推理 / RAG 引用）
-- [x] 前端报告详情页升级：展示 reasoning 和 RAG 引用
-
-**Phase 3 总体验收标准**：
-- Agent 能给出超越规则的推理判断（如 "Bus Factor=2 是高风险，因为历史案例显示..."）
-- RAG 检索准确率 >80%
-- 报告可读性评分（人工抽查 10 份报告）> 4/5
-
----
-
-### Phase 4：RAG 深度优化（当前重点）
-
-**背景**：Phase 3 的 RAG 过于简陋——仅 9 篇文档、整文件入库、纯向量检索、无重排序、检索结果利用浅。需要构建生产级 RAG，让知识库真正成为 Agent 的"外脑"。
-
-**目标**：从"Demo 级语义检索"升级为"多路召回 + 精排 + 自验证 + 引用追踪"的生产级 RAG。
-
-#### Phase 4.1：知识库扩充
-
-- [ ] 批量下载 CHAOSS 指标定义文档（Linux Foundation，30+ 篇权威指标）
-- [ ] 补充知名开源项目治理文档（Python PEP / Node.js 治理 / Kubernetes 社区 / Rust RFC）
-- [ ] OpenSSF Best Practices Badge 检查项说明文档入库
-- [ ] Google SRE Book 关键章节入库（可靠性工程标准）
-- [ ] 知识库规模目标：从 9 篇扩展到 80+ 篇
-
-**验收标准**：
-- CHAOSS 指标定义覆盖率 >80%（Bus Factor / Time to First Response / PR Merge Rate 等核心指标均有定义文档）
-- 检索"社区健康度评估标准"能返回 CHAOSS 官方定义
-
-#### Phase 4.2：行业基准数据结构化入库
-
-- [ ] OpenSSF Scorecard BigQuery 数据集查询与加工
-- [ ] 按项目类型（前端框架 / 后端框架 / 工具库 / CLI 工具）聚合基准指标
-- [ ] 将结构化数据转换为文本段落入库（如"前端框架平均 PR 合并率为 65%，React 为 78%，高于均值"）
-- [ ] 补充 Stack Overflow Developer Survey 技术趋势数据
-
-**验收标准**：
-- 至少覆盖 3 类项目（前端 / 后端 / 工具库）的量化基准
-- Agent 报告中"行业基准对比"有具体数字支撑，而非笼统描述
-
-#### Phase 4.3：文档分块策略
-
-- [ ] 语义分块：按段落/章节边界拆分，避免断句
-- [ ] 重叠窗口：相邻 chunk 保留 20% 重叠，防止上下文丢失
-- [ ] 元数据保留：每个 chunk 携带 {原始文档、章节标题、文档类型、创建时间}
-- [ ] chunk 大小控制：目标 300-500 tokens，最大不超过 1000 tokens
-- [ ] 重写 init_kb.py：支持分块入库，而非整文件入库
-
-**验收标准**：
-- 单篇 2000 字文档分块后，检索"Bus Factor 定义"仍能命中包含定义的 chunk
-- 分块后向量库文档数从 9 增加到 200-400 个 chunk
-
-#### Phase 4.4：混合检索
-
-- [ ] BM25 关键词检索：基于 `rank-bm25` 或 `whoosh` 构建倒排索引
-- [ ] 融合策略：向量检索 TOP-20 + BM25 TOP-20，RRF（Reciprocal Rank Fusion）融合取 TOP-10
-- [ ] 分类过滤保留：支持按 category（case-study / methodology / benchmark）过滤
-- [ ] 查询改写：用 LLM 将用户查询扩展为 3 个不同角度的查询（多查询召回）
-
-**验收标准**：
-- 纯 BM25 能召回向量检索遗漏的关键词匹配文档（如"GPL"精确匹配）
-- 混合检索的 TOP-5 相关性优于单一向量检索（人工抽查 20 条查询）
-
-#### Phase 4.5：重排序（Rerank）
-
-- [ ] 接入轻量交叉编码器（如 `bge-reranker-base` 或 `cross-encoder/ms-marco-MiniLM-L-6-v2`）
-- [ ] 召回阶段扩至 TOP-20，Rerank 后取 TOP-5
-- [ ] 本地推理，无 API 成本
-
-**验收标准**：
-- Rerank 后的 TOP-3 相关性比纯向量检索提升 >15%（人工评估）
-- 推理耗时 <500ms（单查询）
-
-#### Phase 4.6：Self-RAG + 检索验证
-
-- [ ] 检索结果相关性自验证：LLM 判断检索到的文档是否真正回答了查询
-- [ ] 低相关性时自动扩展查询并重新检索
-- [ ] 检索不到时 fallback 到 Web 搜索（接入 Serper/Bing API）
-- [ ] 引用追踪：每条检索结果标注置信度分数
-
-**验收标准**：
-- 自验证的准确率 >85%（人工标注 50 条判断对错）
-- 检索失败时的 fallback 成功率 >70%
-
-#### Phase 4.7：引用追踪与可解释性
-
-- [ ] 检索结果与结论绑定：每条 Agent 结论标注引用的文档 ID + chunk ID
-- [ ] 前端展示引用来源：报告详情页显示"此结论引用自 CHAOSS-Bus-Factor 定义第 3 段"
-- [ ] 引用去重：同一文档被多次引用时合并展示
-
-**验收标准**：
-- 90% 以上的结论能找到对应的引用来源
-- 前端引用展示清晰可读
-
-**Phase 4 总体验收标准**：
-- 知识库规模 >80 篇文档，>200 个 chunk
-- 混合检索 + Rerank 的 TOP-3 准确率 >85%
-- Agent 报告中"行业基准对比"有具体数字和权威来源
+知识库 167 篇 / 810 chunk、语义分块、混合检索（向量 + BM25 + RRF）、CrossEncoder 重排序、Self-RAG 自验证 + Web 搜索 fallback、引用追踪（Citation 模型）。
 
 ---
 
@@ -923,7 +509,30 @@ Phase 3 拆分为 5 个小阶段递进执行：
 
 **背景**：Phase 3 是"伪 Agent"——Orchestrator 硬编码调度 4 个 Agent，工具调用在 Python 代码层完成，LLM 只负责"评分增强"和"写报告"。LLM 没有自主决定"调用什么工具、什么时候调用、要不要调用 RAG"。
 
-**目标**：让 LLM 成为真正的决策者——自主规划分析路径、自主调用工具、自主检索知识、自主推理、自主反思。
+**Phase 3/4 遗留的核心问题**：
+
+1. **RAG 检索到的内容没有进入任何 LLM 的 Prompt**
+   - `_calibrate_dimension` 检索了知识库内容，但只把文档标题传给 Synthesis Agent，`content` 完全没被使用
+   - 4 个分析 Agent 的 LLM 增强 Prompt 里只有 GitHub 原始数据，没有 RAG 内容
+   - 结果：RAG 只是"检索了→存了→展示了标题"，没有真正参与推理
+
+2. **RAG 查询文本是硬编码模板，不是 LLM 动态生成**
+   - `calibrate_*` 方法用固定的 3 个查询角度，与具体项目的上下文无关
+   - 例如 Bus Factor=5（健康）的项目仍然被查询"Bus Factor 风险"，检索角度不匹配
+
+3. **4 个 Agent 各自独立采集数据，存在重复请求**
+   - CommunityAgent 和 SecurityAgent 都会调 GitHub API 拿 contributors/issues
+   - Orchestrator 没有统一规划数据采集，每个 Agent 自己负责采集和推理
+
+4. **Synthesis Agent 的参考信息被人为截断**
+   - findings/risks 只取前 3 条，reasoning 截断到 200 字符
+   - LLM 无法基于完整信息做综合判断
+
+5. **OpenSSF Scorecard 基准数据未充分利用**
+   - `benchmark_tool.py` 提供直接数据库查询，但 Orchestrator 未调用
+   - 仅依赖向量库检索命中 benchmark 文档，无法主动获取特定指标的基准值
+
+**目标**：让 LLM 成为真正的决策者——自主规划分析路径、自主调用工具、自主检索知识、自主推理、自主反思，同时解决上述 Phase 3/4 遗留的 RAG 利用不足问题。
 
 #### Phase 5.1：LLM Function Calling 基础设施
 
@@ -947,26 +556,40 @@ Phase 3 拆分为 5 个小阶段递进执行：
 - LLM 看到仓库地址后，能自主选择调用 `github.get_repo_metadata` 获取基础信息
 - 工具描述足够清晰，LLM 不会选错工具
 
-#### Phase 5.3：RAG 工具化
+#### Phase 5.3：RAG 工具化（解决 Phase 4 RAG 利用不足问题）
+
+**核心问题**：Phase 4 的 RAG 只是"检索了→存了→展示了标题"，检索到的文档内容完全没有进入任何 LLM 的 Prompt，没有真正参与推理。
 
 - [ ] 将 RAG 检索封装为 LLM 可调用的 Tool：`rag.query(query_text, category, n_results)`
+  - Tool 返回结果必须包含完整文档内容（content），而不仅是标题
+  - LLM 拿到内容后自主判断引用哪些段落来支撑结论
 - [ ] 将行业基准查询封装为 Tool：`rag.get_benchmark(project_type, metric_name)`
+  - 解决 Phase 4 中 `benchmark_tool.py` 未被 Orchestrator 调用的问题
+  - LLM 可主动查询"前端框架的平均 PR 合并率是多少"
 - [ ] 将竞品对比封装为 Tool：`rag.get_competitors(tech_domain)`
+- [ ] LLM 自主生成查询文本，替代 Phase 4 的硬编码模板
+  - 例如 Bus Factor=5 时，LLM 应生成"Bus Factor 高的项目特征"而非固定查询"Bus Factor 风险"
 - [ ] LLM 自主决定何时检索、检索什么、用哪个 Tool
 
 **验收标准**：
-- LLM 在分析社区健康度时，能自主调用 `rag.query("Bus Factor 风险")` 获取案例
-- LLM 在给出评分时，能自主调用 `rag.get_benchmark("frontend-framework", "pr_merge_rate")` 获取基准
+- LLM 在分析社区健康度时，能自主调用 `rag.query()` 获取案例，并在结论中引用具体内容
+- LLM 在给出评分时，能自主调用 `rag.get_benchmark()` 获取基准，并说明"该指标高于/低于同类项目均值"
+- RAG 检索到的文档内容必须出现在 LLM 的上下文窗口中，参与推理过程
 
-#### Phase 5.4：Plan-and-Execute Agent
+#### Phase 5.4：Plan-and-Execute Agent（解决 Agent 重复采集问题）
+
+**核心问题**：Phase 3 中 4 个 Agent 各自独立采集数据，CommunityAgent 和 SecurityAgent 都会调 GitHub API 拿 contributors/issues，存在大量重复请求。
 
 - [ ] 规划阶段：LLM 接收任务后，先输出分析计划（Plan）——需要哪些数据、调用哪些工具、分析顺序
+  - Plan 中明确数据依赖关系，避免重复采集（如 contributors 数据只需获取一次，供社区分析和安全分析共享）
 - [ ] 执行阶段：按 Plan 逐步执行，每步调用对应 Tool
+  - Orchestrator 缓存已采集的数据，同一数据不重复请求
 - [ ] 计划修正：执行中发现数据缺失或工具失败时，LLM 动态调整 Plan
 - [ ] Plan 持久化：将 Plan 和执行日志存入数据库，便于追溯
 
 **验收标准**：
 - LLM 分析 `python-poetry/poetry` 时，Plan 包含：获取元数据 → 分析社区活跃度 → 检查安全漏洞 → 对比同类工具 → 生成报告
+- 同一 GitHub API 数据（如 contributors）在整个分析流程中只请求一次，各分析步骤共享结果
 - 某个 Tool 失败时，LLM 能调整 Plan（如跳过代码分析，继续其他维度）
 
 #### Phase 5.5：ReAct Loop 升级（LLM 驱动的 ReAct）
@@ -981,17 +604,24 @@ Phase 3 拆分为 5 个小阶段递进执行：
 - 单次分析任务的 ReAct 轮次中位数在 8-15 轮
 - LLM 不会在无意义步骤上循环（如反复调用同一个 Tool 获取相同数据）
 
-#### Phase 5.6：动态分析流程（移除硬编码 4 个 Agent）
+#### Phase 5.6：动态分析流程（移除硬编码 4 个 Agent + 解决 Synthesis 截断问题）
+
+**核心问题**：Phase 3 中 Synthesis Agent 的参考信息被人为截断——findings/risks 只取前 3 条，reasoning 截断到 200 字符，LLM 无法基于完整信息做综合判断。
 
 - [ ] 废弃 `community_agent.py` / `quality_agent.py` / `security_agent.py` / `evolution_agent.py`
 - [ ] 分析维度不再硬编码为"4 个维度"，而是由 LLM 根据项目特点动态决定分析重点
-- [ ] 例如：对于一个安全敏感库（如密码学库），LLM 自动加大安全分析权重；对于一个新兴实验项目，LLM 自动关注社区活跃度
+  - 例如：安全敏感库（如密码学库）自动加大安全分析权重；新兴实验项目自动关注社区活跃度
 - [ ] 评分体系保留：社区/质量/安全/演进 4 维度框架作为默认结构，但 LLM 可调整权重和侧重点
+- [ ] 移除 Synthesis Agent 的人工截断：LLM 自主决定需要哪些信息来生成报告
+  - 不再限制 findings/risks 只取前 3 条
+  - 不再截断 reasoning 到 200 字符
+  - LLM 可直接访问完整的 Agent 输出、RAG 检索内容和原始数据
 
 **验收标准**：
 - 分析 `openssl/openssl` 时，LLM 自动加强安全维度分析（调用更多安全相关 Tool）
 - 分析 `facebook/react` 时，LLM 自动加强社区和技术演进分析
 - 分析一个非常小的个人项目时，LLM 自动简化分析流程，不做冗余检查
+- Synthesis 报告生成时，LLM 能看到完整的推理过程和所有 findings，不再有信息截断
 
 #### Phase 5.7：推理与反思（Reflection）
 
@@ -1014,8 +644,9 @@ Phase 3 拆分为 5 个小阶段递进执行：
 **Phase 5 总体验收标准**：
 - LLM 能自主完成从"接收仓库地址"到"输出完整报告"的全流程，无需硬编码步骤
 - 不同项目类型（安全库 / 前端框架 / CLI 工具 / 个人项目）的分析路径有显著差异
+- **RAG 检索到的文档内容必须进入 LLM 的上下文窗口，真正参与推理**（解决 Phase 4 "只检索不用"的问题）
 - 分析全流程可追溯：每个结论都能找到对应的 Tool 调用记录和 RAG 引用
-- 面试叙事："我手写了一个 Plan-and-Execute Agent，LLM 自主规划分析路径、自主调用 MCP 工具、自主检索知识库、自主反思修正"
+- 面试叙事："我手写了一个 Plan-and-Execute Agent，LLM 自主规划分析路径、自主调用 MCP 工具、自主检索知识库、自主反思修正。区别于 Phase 3 的'伪 Agent'，我的 RAG 检索结果真正进入了 LLM 的推理过程"
 
 ---
 
@@ -1050,13 +681,7 @@ Phase 3 拆分为 5 个小阶段递进执行：
 ```bash
 # 一键启动
 docker-compose -f docker-compose.dev.yml up
-
-# 服务列表
-- api: FastAPI 开发服务器 (端口 8000)
-- web: React 开发服务器 (端口 3000)
-- db: PostgreSQL 16 (端口 5432)
-- redis: Redis 7 (端口 6379)
-- worker: Celery Worker
+# 服务：FastAPI(8000) / React(3000) / PostgreSQL(5432) / Redis(6379) / Celery Worker
 ```
 
 ### 11.2 生产环境
@@ -1166,7 +791,8 @@ osscout/
 │   │   │   ├── reranker.py       # 交叉编码器重排序（Phase 4.5）
 │   │   │   ├── self_rag.py       # Self-RAG 自验证 + 查询扩展（Phase 4.6）
 │   │   │   ├── web_search.py     # Web 搜索 fallback（Serper API）（Phase 4.6）
-│   │   │   └── query.py          # RAG 查询引擎（高层封装）
+│   │   │   ├── query.py          # RAG 查询引擎（高层封装）
+│   │   │   └── citations.py      # 统一引用追踪模型（Phase 4.7）
 │   │   ├── services/
 │   │   │   ├── __init__.py
 │   │   │   ├── github_service.py
@@ -1242,10 +868,9 @@ osscout/
 
 ### 13.2 为什么用 MCP 而非直接调用 API
 
-- **标准化**：MCP 是 emerging standard，展示对生态的跟进
+- **标准化**：MCP 是新兴标准，展示对生态的跟进
 - **隔离性**：工具逻辑与 Agent 逻辑解耦
-- **可扩展性**：新增数据源只需新增 MCP Server，无需修改 Agent 代码
-- **为 Function Calling 铺路**：Phase 5 中 MCP Tools 自动转换为 LLM 可调用的 Tool Schema，标准化描述让 LLM 能自主理解和选择工具
+- **为 Function Calling 铺路**：Phase 5 中 MCP Tools 自动转换为 LLM 可调用的 Tool Schema
 
 ### 13.3 为什么从规则评分开始，再引入 LLM
 
@@ -1255,21 +880,15 @@ osscout/
 
 ### 13.4 为什么让 LLM 自主调用工具（Phase 5 核心决策）
 
-Phase 3 的"伪 Agent"设计（硬编码 4 个 Agent + LLM 只负责"增强"）虽然能跑通，但存在根本局限：LLM 的能力被浪费了。让 LLM 自主调用工具的决策理由：
-
-- **灵活性**：不同项目类型需要不同的分析路径。安全库需要重点检查漏洞，前端框架需要关注社区活跃度，硬编码流程无法自适应
-- **可扩展性**：新增一个 MCP Tool（如 deps.dev API）后，只需更新 Tool Schema，LLM 自动学会使用，无需修改 Orchestrator 代码
-- **面试深度**："我手写了一个 Plan-and-Execute Agent，LLM 自主规划、自主调用工具、自主反思"——这比"我调用了 4 个预定义 Agent"更有技术深度
-- **与框架的对比**：LangChain 的 AgentExecutor 也做类似的事，但隐藏了核心的决策逻辑。手写实现能精确控制每一轮 ReAct 的 Thought/Action/Observation
+- **灵活性**：不同项目类型需要不同的分析路径，硬编码流程无法自适应
+- **可扩展性**：新增一个 MCP Tool 后，只需更新 Tool Schema，LLM 自动学会使用
+- **面试深度**：手写 Plan-and-Execute Agent 能精确控制每一轮 ReAct 的 Thought/Action/Observation
 
 ### 13.5 为什么 RAG 要做深做透（Phase 4 核心决策）
 
-Phase 3 的 RAG 只有 9 篇文档、整文件入库、纯向量检索，本质上是个 Demo。深度优化的理由：
-
-- **知识库是 Agent 的"外脑"**：Agent 的推理质量取决于它能引用多少权威知识。9 篇文档撑不起"专家级"判断
-- **行业基准是差异化来源**：OpenSSF Scorecard 的百万级项目数据、CHAOSS 的学术级指标定义——这些是"硬通货"，能让报告有数据支撑
-- **检索质量决定引用可信度**：混合检索 + Rerank + Self-RAG 能确保 Agent 引用的知识是真正相关的，而非"凑数"
-- **面试叙事**："我的 RAG 系统包含 80+ 篇权威文档、混合检索、交叉编码器重排序、检索自验证"——这比"我接了个向量库"更有说服力
+- **知识库是 Agent 的"外脑"**：9 篇文档撑不起"专家级"判断
+- **行业基准是差异化来源**：OpenSSF Scorecard 百万级数据、CHAOSS 学术级指标定义
+- **检索质量决定可信度**：混合检索 + Rerank + Self-RAG 确保引用知识真正相关
 
 ---
 

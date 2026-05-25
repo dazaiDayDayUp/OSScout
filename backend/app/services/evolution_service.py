@@ -103,7 +103,7 @@ async def _get_latest_version(pkg: dict) -> dict[str, Any] | None:
         latest = await _get_pypi_latest(name)
     elif ecosystem == "npm":
         latest = await _get_npm_latest(name)
-    # 其他生态系统 Phase 1 暂不查询
+    # 其他生态系统暂不查询
 
     if not latest:
         return None

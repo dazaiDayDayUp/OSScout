@@ -8,21 +8,10 @@
 
 ## 当前进展
 
-**Phase 0 ~ Phase 3 全部完成**，涵盖：基础设施 → CLI 单项目分析 → Web 平台（React + FastAPI + Celery）→ Agent 智能化（LLM 推理 + RAG 初版）。
-
-**Phase 4 进展（RAG 深度优化）**：
-
-- ✅ 4.1 知识库扩充：167 篇文档（CHAOSS 80 + OpenSSF 20 + OWASP 48 + 治理/案例/竞品 19）
-- ✅ 4.2 行业基准数据：OpenSSF Scorecard API 采集 41 个项目，117 条基准
-- ✅ 4.3 语义分块：810 个 chunk，按 Markdown 标题边界拆分，20% 重叠窗口
-- ✅ 4.4 混合检索：向量检索 + BM25 关键词检索 + RRF 融合
-- ✅ 4.5 交叉编码器重排序：`cross-encoder/ms-marco-MiniLM-L-6-v2` 精排
-- ✅ 4.6 Self-RAG：LLM 自验证检索结果 + 查询扩展 + Web 搜索 fallback（Serper API）
-- ⏳ 4.7 引用追踪：每条结论标注来源文档 ID + chunk ID
+**Phase 0 ~ Phase 4 全部完成**，涵盖：基础设施 → CLI 单项目分析 → Web 平台 → Agent 智能化 → 生产级 RAG（167 篇知识库 / 语义分块 / 混合检索 + BM25 + RRF / CrossEncoder 重排序 / Self-RAG 自验证 / Web 搜索 fallback / 引用追踪）。
 
 **当前重点**：
 
-- **Phase 4.7 — 引用追踪**：为 Agent 结论添加可追溯的引用来源
 - **Phase 5 — 真正的 Agent 架构**：LLM Function Calling、MCP 工具注册表、Plan-and-Execute 自主规划、ReAct 自主循环、Reflection 反思
 
 详见 [PROGRESS.md](PROGRESS.md) 了解已完成内容、已知问题和下一步行动。
@@ -69,7 +58,7 @@ API 文档：`http://localhost:8000/docs`
 | Phase 1 | MVP — CLI 单项目分析（4 Agent + 100 分评分） | 已完成 |
 | Phase 2 | V1 — Web 平台 + 异步任务 + React 前端可视化 | 已完成 |
 | Phase 3 | V2 — Agent 智能化 + RAG 初版（LLM 推理 + 知识库） | 已完成 |
-| **Phase 4** | **RAG 深度优化（知识扩充/分块/混合检索/Rerank/Self-RAG）** | **6/7 完成** |
+| Phase 4 | RAG 深度优化（知识扩充/分块/混合检索/Rerank/Self-RAG/引用追踪） | 已完成 |
 | **Phase 5** | **真正的 Agent 架构（Function Calling/Plan-and-Execute/Reflection）** | **当前重点** |
 
 完整规划、架构设计、数据模型、面试叙事框架见 [PROJECT_PLAN.md](PROJECT_PLAN.md)。

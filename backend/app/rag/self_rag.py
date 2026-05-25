@@ -27,6 +27,7 @@ from app.core.logger import get_logger
 from app.llm import LLMMessage, get_llm_provider
 from app.llm.schemas import StructuredOutput
 
+from .citations import CitationCollector
 from .hybrid_retriever import HybridRetriever
 from .reranker import CrossEncoderReranker
 from .vector_store import VectorStore
@@ -149,6 +150,7 @@ class SelfRAGQueryEngine:
                 "source": "kb" | "web",     # 数据来源
                 "expanded_queries": [...],  # 使用的扩展查询（如有）
                 "confidence": float,        # 整体置信度
+                "citations": [...],         # 引用来源列表
             }
         """
         logger.info("Self-RAG 检索开始", query=query_text[:80], category=category)
@@ -173,12 +175,15 @@ class SelfRAGQueryEngine:
                 query=query_text[:80],
                 confidence=validation.confidence,
             )
+            collector = CitationCollector()
+            collector.add_from_kb(initial_results)
             return {
                 "results": initial_results,
                 "validation": validation.model_dump(),
                 "source": "kb",
                 "expanded_queries": [],
                 "confidence": validation.confidence,
+                "citations": collector.to_dict_list(),
             }
 
         # Step 3: 查询扩展 + 重新检索
@@ -203,12 +208,15 @@ class SelfRAGQueryEngine:
                         query=query_text[:80],
                         confidence=revalidation.confidence,
                     )
+                    collector = CitationCollector()
+                    collector.add_from_kb(merged[:n_results])
                     return {
                         "results": merged[:n_results],
                         "validation": revalidation.model_dump(),
                         "source": "kb",
                         "expanded_queries": validation.suggested_queries,
                         "confidence": revalidation.confidence,
+                        "citations": collector.to_dict_list(),
                     }
 
         # Step 4: Web 搜索 fallback
@@ -323,6 +331,7 @@ class SelfRAGQueryEngine:
                 "source": "none",
                 "expanded_queries": [],
                 "confidence": 0.0,
+                "citations": [],
             }
 
         try:
@@ -332,6 +341,8 @@ class SelfRAGQueryEngine:
                 query=query[:80],
                 results=len(web_results),
             )
+            collector = CitationCollector()
+            collector.add_from_web(web_results)
             return {
                 "results": web_results,
                 "validation": {
@@ -342,6 +353,7 @@ class SelfRAGQueryEngine:
                 "source": "web",
                 "expanded_queries": [],
                 "confidence": 0.6 if web_results else 0.0,
+                "citations": collector.to_dict_list(),
             }
         except Exception as e:
             logger.error("Web 搜索 fallback 失败", query=query[:80], error=str(e))
@@ -351,6 +363,7 @@ class SelfRAGQueryEngine:
                 "source": "none",
                 "expanded_queries": [],
                 "confidence": 0.0,
+                "citations": [],
             }
 
     @staticmethod

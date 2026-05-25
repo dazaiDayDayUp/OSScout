@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-**Phase 0~3 全部完成。当前重点：Phase 4（RAG 深度优化）+ Phase 5（真正的 Agent 架构重构）。**
+**Phase 0~4 全部完成。当前重点：Phase 5（真正的 Agent 架构重构）。**
 
 最近更新：2026-05-25
 
@@ -20,22 +20,11 @@
 | Phase 1 | 4 个分析 Agent + Orchestrator 并发调度 + CLI 文本报告 | ✅ |
 | Phase 2 | REST API + Celery 异步任务 + React 前端可视化 | ✅ |
 | Phase 3 | LLM 推理增强 + ChromaDB RAG 初版 + Synthesis 综合报告 | ✅ |
+| Phase 4 | 生产级 RAG：167 篇知识库 / 语义分块 / 混合检索(BM25+RRF) / CrossEncoder 重排序 / Self-RAG 自验证 / Web 搜索 fallback / 引用追踪 | ✅ |
 
 ---
 
 ## 当前重点
-
-### Phase 4：RAG 深度优化
-
-| 子任务 | 内容 | 状态 |
-|--------|------|------|
-| 4.1 | 知识库扩充：CHAOSS 指标(80) + OpenSSF 检查项(20) + OWASP 安全(48) + 治理(10) + 案例(4) + 竞品(3) = **167 篇** | ✅ |
-| 4.2 | 行业基准数据：OpenSSF Scorecard API 采集 41 个项目，聚合 117 条基准，封装 `get_benchmark` Tool | ✅ |
-| 4.3 | 文档分块策略：语义分块 + 重叠窗口 + 元数据保留 | ✅ |
-| 4.4 | 混合检索：向量检索 + BM25 关键词检索融合 | ✅ |
-| 4.5 | 重排序（Rerank）：交叉编码器精排 | ✅ |
-| 4.6 | Self-RAG：检索结果自验证 + fallback Web 搜索 | ✅ |
-| 4.7 | 引用追踪：每条结论标注来源文档 ID + 具体段落 | ⏳ |
 
 ### Phase 5：真正的 Agent 架构重构
 
@@ -56,12 +45,19 @@
 
 | 优先级 | 问题 | 说明 | 状态 |
 |--------|------|------|------|
+| **高** | **RAG 检索内容未进入 LLM 上下文** | `_calibrate_dimension` 只把文档标题传给 Synthesis Agent，`content` 完全没被使用；4 个 Agent 的 LLM 增强 Prompt 也没有 RAG 内容。RAG 只是"检索了→存了→展示了标题"，没有真正参与推理 | **Phase 5.3 解决** |
 | 中 | Kimi 并发限制（429） | 免费账户并发上限 3，Synthesis 可能触发 429 重试，延迟 10-60 秒 | 自动重试，最终成功 |
 | 中 | 分析耗时约 2 分钟 | GitHub API + 4 Agent + RAG + Synthesis 完整链路 | Phase 5 的自主规划可能优化并行度 |
 | 中 | 超大仓库分析慢 | monorepo 依赖查询串行 | Phase 5 Agent 可自主跳过非关键步骤 |
 | 低 | Windows 控制台 GBK 乱码 | 仅显示问题，不影响文件/API | 低优先级 |
 | **解决** | ~~RAG 仅 9 篇文档~~ | ~~数据量太少，检索质量受限~~ | **4.1 完成：已扩充至 167 篇** |
 | 低 | 硬编码 4 个 Agent 流程 | LLM 没有自主决策权，只是"高级填空" | **Phase 5 解决** |
+
+## 最近完成（2026-05-25）
+
+| 事项 | 说明 |
+|------|------|
+| Phase 4.7 引用追踪 | 统一 Citation 模型，覆盖 KB / Web / Benchmark 三类来源；前端按来源类型分组展示；修复 analysis_tasks raw_results 漏存 Bug |
 
 ## 最近修复（2026-05-20）
 
@@ -86,9 +82,9 @@
 
 ## 下一步
 
-**Phase 4.7：引用追踪**
+**Phase 5.1：LLM Function Calling 基础设施**
 
-- 检索结果与 Agent 结论绑定：每条结论标注引用的文档 ID + chunk ID
-- RAGQueryEngine 返回结果中增加 `citations` 字段
-- 前端报告详情页展示引用来源（"此结论引用自 CHAOSS-Bus-Factor 定义第 3 段"）
-- 引用去重：同一文档被多次引用时合并展示
+- 统一 Tool 定义协议：{name, description, parameters(schema), handler}
+- Tool Schema 自动生成：从函数签名 + docstring 自动生成 JSON Schema
+- Tool 执行器：解析 LLM 返回的 tool_calls → 执行对应函数 → 返回 observation
+- 支持 OpenAI 格式 function calling（Kimi / DeepSeek 均兼容）

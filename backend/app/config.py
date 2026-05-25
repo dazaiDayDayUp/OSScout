@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # === GitHub ===
     github_token: str = ""  # 用于提高 API 限频
 
-    # === Phase 4.6: Web 搜索 Fallback ===
+    # === Web 搜索 Fallback（Serper API） ===
     # Serper API Key: https://serper.dev/（每月 2500 次免费查询）
     serper_api_key: str = ""
 

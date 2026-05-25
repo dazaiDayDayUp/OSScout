@@ -83,13 +83,19 @@ async def _async_run_analysis(
         # 计算综合评级
         rating = _calculate_rating(result.overall_percentage)
 
-        # 构造原始结果字典
+        # 构造原始结果字典（补充之前漏存的字段，增加 citations）
         raw_results = {
             "dimensions": result.dimensions,
             "repo": result.repo,
             "overall_score": result.overall_score,
             "overall_max_score": result.overall_max_score,
             "overall_percentage": result.overall_percentage,
+            # 之前漏存的字段（calibrations/conflicts/react_summary/synthesis）
+            "calibrations": result.calibrations,
+            "conflicts": result.conflicts,
+            "react_summary": result.react_summary,
+            "synthesis": result.synthesis,
+            "citations": result.citations,
         }
 
         # 创建 DueDiligenceReport 记录

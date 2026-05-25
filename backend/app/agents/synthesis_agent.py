@@ -75,6 +75,11 @@ class SynthesisReport(BaseModel):
         description="数据来源概述：说明本报告基于规则评分、LLM推理和RAG引用的综合判断"
     )
 
+    citations: list[dict] = Field(
+        default_factory=list,
+        description="报告中引用的来源列表，每个元素包含 source_type / document_id / title / snippet"
+    )
+
 # ═══════════════════════════════════════════════════════════════
 # 单步 Prompt 模板
 # ═══════════════════════════════════════════════════════════════
@@ -112,6 +117,9 @@ _SYNTHESIS_PROMPT = PromptTemplate(
 
 ## RAG 知识库校准引用
 {calibration_summary}
+
+## 引用来源列表（请在结论中适当引用）
+{citations_summary}
 
 ## 维度间冲突检测
 {conflicts_summary}
@@ -256,6 +264,21 @@ class SynthesisAgent:
         conflicts = result.get("conflicts", [])
         conflicts_summary = "\n".join(f"- {c}" for c in conflicts) if conflicts else "无冲突"
 
+        # 引用来源摘要
+        citations = result.get("citations", [])
+        cite_lines: list[str] = []
+        for c in citations[:10]:  # 最多展示 10 条引用
+            source_type = c.get("source_type", "kb")
+            title = c.get("title", "")
+            if source_type == "web":
+                url = c.get("url", "")
+                cite_lines.append(f"- [Web] {title} ({url})")
+            elif source_type == "benchmark":
+                cite_lines.append(f"- [基准] {title}")
+            else:
+                cite_lines.append(f"- [知识库] {title}")
+        citations_summary = "\n".join(cite_lines) if cite_lines else "无引用来源"
+
         return {
             "owner": repo["owner"],
             "repo": repo["repo"],
@@ -283,6 +306,7 @@ class SynthesisAgent:
             "evolution_risks": evolution["risks"],
             "evolution_reasoning": evolution["reasoning"],
             "calibration_summary": calibration_summary,
+            "citations_summary": citations_summary,
             "conflicts_summary": conflicts_summary,
         }
 

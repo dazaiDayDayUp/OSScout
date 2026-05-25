@@ -1,6 +1,6 @@
 """Orchestrator 协调器：并行调度 + RAG 校准 + 冲突消解 + ReAct Loop
 
-Phase 3.4 重构后的 Orchestrator 包含三层能力：
+Orchestrator 包含三层能力：
 1. 并行调度 4 个分析 Agent（已有）
 2. RAG 校准：每个 Agent 分析完成后检索知识库进行基准对比
 3. 冲突消解：检测维度间的矛盾结论，由 Orchestrator 协调
@@ -23,6 +23,7 @@ from app.agents.security_agent import SecurityAgent
 from app.agents.synthesis_agent import SynthesisAgent
 from app.core.logger import get_logger
 from app.core.utils import parse_repo_url
+from app.rag.citations import CitationCollector
 from app.rag.query import RAGQueryEngine
 
 logger = get_logger(__name__)
@@ -86,25 +87,20 @@ class OrchestratorResult(BaseModel):
     overall_percentage: float
     findings: list[str]
     risks: list[str]
-    # Phase 3.4 新增字段
     calibrations: dict  # 各维度的 RAG 校准结果
     conflicts: list[str]  # 维度间冲突检测结论
     react_summary: str  # ReAct Loop 最终总结
-    # Phase 3.5 新增字段
     synthesis: dict  # 综合报告 Agent 生成的结构化报告
+    citations: list[dict]  # 引用来源列表（去重后）
 
 
 class Orchestrator:
     """
-    尽调分析协调器（Phase 3.4 增强版）
+    尽调分析协调器
 
     通过 asyncio.gather 并发调度 4 个分析 Agent，
     单个 Agent 失败时输出降级结果，不影响其他维度。
-
-    Phase 3.4 新增：
-    - RAG 校准：每个维度分析后检索知识库进行基准对比
-    - 冲突消解：检测维度间矛盾结论
-    - ReAct Loop：Thought-Action-Observation 循环骨架
+    包含 RAG 校准、冲突消解和 ReAct Loop 骨架。
     """
 
     def __init__(self) -> None:
@@ -159,6 +155,9 @@ class Orchestrator:
         all_findings: list[str] = []
         all_risks: list[str] = []
 
+        # 引用收集器，汇总所有维度的引用来源
+        citation_collector = CitationCollector()
+
         for name, result in zip(dimension_names, results):
             if isinstance(result, asyncio.CancelledError):
                 # Agent 被异步取消（通常是外部超时或 Worker 终止信号）
@@ -179,6 +178,12 @@ class Orchestrator:
                 # RAG 校准：检索相关知识库进行基准对比
                 calibration = await self._calibrate_dimension(name, dim_result)
                 calibrations[name] = calibration
+
+                # 从校准结果中提取引用
+                for cal in calibration:
+                    if "citation" in cal:
+                        from app.rag.citations import Citation
+                        citation_collector.add(Citation(**cal["citation"]))
 
             dimensions[name] = dim_result
             overall_score += dim_result["score"]
@@ -203,9 +208,14 @@ class Orchestrator:
             conflicts=len(conflicts),
         )
 
-        # ========== Step 5: Synthesis (Phase 3.5) ==========
+        # ========== Step 5: Synthesis ==========
         # 调用综合报告 Agent 生成最终结构化报告
         logger.info("Synthesis: 生成综合报告")
+
+        # 汇总去重后的引用列表
+        all_citations = citation_collector.to_dict_list()
+        logger.info("引用汇总完成", unique_citations=len(all_citations))
+
         orchestrator_data = {
             "repo": repo_info,
             "dimensions": dimensions,
@@ -217,6 +227,7 @@ class Orchestrator:
             "calibrations": calibrations,
             "conflicts": conflicts,
             "react_summary": react_summary,
+            "citations": all_citations,
         }
         synthesis_report = await self.synthesis_agent.generate(orchestrator_data)
 
@@ -227,6 +238,7 @@ class Orchestrator:
             overall_percentage=overall_percentage,
             conflicts=len(conflicts),
             synthesis_rating=synthesis_report.overall_rating,
+            citations=len(all_citations),
         )
 
         return OrchestratorResult(
@@ -241,6 +253,7 @@ class Orchestrator:
             conflicts=conflicts,
             react_summary=react_summary,
             synthesis=synthesis_report.model_dump(),
+            citations=all_citations,
         )
 
     # ------------------------------------------------------------------

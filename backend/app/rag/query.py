@@ -10,6 +10,7 @@
 
 from app.core.logger import get_logger
 
+from .citations import extract_citation_from_kb_result
 from .hybrid_retriever import HybridRetriever
 from .vector_store import VectorStore
 
@@ -23,7 +24,7 @@ class RAGQueryEngine:
     """RAG 查询引擎
 
     封装向量库的检索逻辑，提供面向业务场景的查询方法。
-    Phase 4.4 起默认启用混合检索（向量 + BM25 + RRF），
+    默认启用混合检索（向量 + BM25 + RRF），
     可通过 use_hybrid=False 回退到纯向量检索。
 
     所有检索结果按相似度排序（distance 越小越相似）。
@@ -46,7 +47,6 @@ class RAGQueryEngine:
             vector_store = VectorStore(collection_name=collection_name)
         self.vector_store = vector_store
 
-        # Phase 4.4：混合检索
         self._hybrid: HybridRetriever | None = None
         if use_hybrid:
             try:
@@ -65,7 +65,7 @@ class RAGQueryEngine:
         category: str | None = None,
         n_results: int = DEFAULT_TOP_K,
     ) -> list[dict]:
-        """通用检索（Phase 4.4 起默认使用混合检索）
+        """通用检索（默认使用混合检索）
 
         Args:
             query_text: 查询文本
@@ -90,7 +90,6 @@ class RAGQueryEngine:
             hybrid=self._hybrid is not None,
         )
 
-        # Phase 4.4：优先使用混合检索
         if self._hybrid is not None:
             results = self._hybrid.search(
                 query_text=query_text,
@@ -111,6 +110,9 @@ class RAGQueryEngine:
             returned=len(results),
             best_distance=results[0]["distance"] if results else None,
         )
+
+        for r in results:
+            r["citation"] = extract_citation_from_kb_result(r).model_dump()
 
         return results
 

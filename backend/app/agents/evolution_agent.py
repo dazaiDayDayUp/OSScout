@@ -34,9 +34,9 @@ class EvolutionAgent:
     - 发布频率（最近 12 个月 release 数量）
     - 技术栈更新（核心依赖最新版本差距）
     - Breaking Change 密度（release notes + major version bump）
-    - 竞品对比（Phase 1 跳过）
+    - 竞品对比（当前未启用）
 
-    Phase 3.3 增强：在规则评分基础上接入 LLM 推理。
+    在规则评分基础上接入 LLM 推理。
     """
 
     def __init__(self) -> None:

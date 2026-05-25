@@ -7,7 +7,7 @@ class Reporter:
     """
     尽调报告格式化器
 
-    当前版本输出 Markdown 风格的纯文本，后续可扩展为 HTML、JSON 等格式。
+    当前版本输出 Markdown 风格的纯文本。
     """
 
     def format_text(self, result: OrchestratorResult) -> str:
@@ -77,7 +77,7 @@ class Reporter:
             lines.append(self._render_dimension(evolution))
             lines.append("")
 
-        # RAG 校准（Phase 3.4 新增）
+        # RAG 校准
         if result.calibrations:
             lines.append("-" * 60)
             lines.append("知识库校准引用")
@@ -91,7 +91,7 @@ class Reporter:
                         lines.append(f"    -> {topic} (相关度: {dist:.2f})")
             lines.append("")
 
-        # 冲突消解（Phase 3.4 新增）
+        # 冲突消解
         if result.conflicts:
             lines.append("-" * 60)
             lines.append("维度间冲突检测")
@@ -118,7 +118,7 @@ class Reporter:
                 lines.append(f"  ! {risk}")
             lines.append("")
 
-        # ReAct 总结（Phase 3.4 新增）
+        # ReAct 总结
         if result.react_summary:
             lines.append("-" * 60)
             lines.append("综合评估")
@@ -126,7 +126,7 @@ class Reporter:
             lines.append(f"  {result.react_summary}")
             lines.append("")
 
-        # 综合报告（Phase 3.5 新增）
+        # 综合报告
         if result.synthesis:
             lines.append("-" * 60)
             lines.append("综合报告（Synthesis Agent）")
@@ -239,7 +239,7 @@ class Reporter:
         lines.append(f"  得分: {dim['score']}/{dim['max_score']} ({dim['percentage']}%)")
         lines.append("")
 
-        # LLM 推理（Phase 3.3 新增）
+        # LLM 推理
         reasoning = dim.get("reasoning")
         if reasoning and not reasoning.startswith("[LLM 推理不可用]"):
             lines.append("  [推理]")

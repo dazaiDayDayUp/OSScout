@@ -253,8 +253,8 @@ def score_competitor_comparison() -> ScoreItem:
     return ScoreItem(
         score=0,
         max_score=4,
-        raw_value="Phase 1 未实现",
-        description="竞品对比功能将在后续阶段接入",
+        raw_value="未实现",
+        description="竞品对比依赖外部搜索能力，当前未配置搜索服务",
     )
 
 
@@ -316,7 +316,7 @@ def score_evolution(raw_data: dict[str, Any]) -> EvolutionScoreResult:
         risks.append(f"存在未文档化的 Breaking Change（{breaking_score.raw_value}）")
 
     # 竞品对比
-    findings.append("竞品对比功能待 Phase 2 接入")
+    findings.append("竞品对比：当前未配置搜索服务")
 
     return EvolutionScoreResult(
         total_score=total,

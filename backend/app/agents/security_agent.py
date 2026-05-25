@@ -36,7 +36,7 @@ class SecurityAgent:
     - 许可证风险（许可证商业友好度）
     - 安全响应速度（漏洞修复及时性）
 
-    Phase 3.3 增强：在规则评分基础上接入 LLM 推理。
+    在规则评分基础上接入 LLM 推理。
     """
 
     def __init__(self) -> None:

@@ -38,7 +38,7 @@ class QualityAgent:
     - 文档完整度
     - 代码复杂度
 
-    Phase 3.3 增强：在规则评分基础上接入 LLM 推理。
+    在规则评分基础上接入 LLM 推理。
     """
 
     def __init__(self) -> None:

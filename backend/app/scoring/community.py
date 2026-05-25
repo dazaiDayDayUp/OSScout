@@ -206,7 +206,6 @@ def score_release_stability(releases: list[dict]) -> ScoreItem:
     Release 稳定性：最近 6 个月内是否有 release
 
     简化判断：只看最近一次 release 是否在 6 个月内。
-    Phase 1.5 可扩展为检查频率稳定性（标准差）。
     """
     if not releases:
         return ScoreItem(

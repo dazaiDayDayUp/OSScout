@@ -42,6 +42,9 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  Globe,
+  BarChart3,
+  Link2,
 } from 'lucide-react'
 
 /** 维度配置 */
@@ -100,6 +103,7 @@ export default function ReportPage() {
     conflicts,
     react_summary,
     synthesis,
+    citations,
   } = report
 
   // 构建条形图数据
@@ -273,7 +277,7 @@ export default function ReportPage() {
 
       {/* 综合报告（Synthesis Agent） */}
       {hasSynthesis && (
-        <SynthesisSection synthesis={synthesis} />
+        <SynthesisSection synthesis={synthesis as import('@/types/api').SynthesisReport} />
       )}
 
       {/* 关键发现 */}
@@ -322,6 +326,11 @@ export default function ReportPage() {
             </ul>
           </CardContent>
         </Card>
+      )}
+
+      {/* Phase 4.7：引用来源汇总 */}
+      {citations && citations.length > 0 && (
+        <CitationsSection citations={citations} />
       )}
     </div>
   )
@@ -423,27 +432,78 @@ function DimensionCard({
           </div>
         )}
 
-        {/* RAG 校准引用 */}
+        {/* RAG 校准引用（Phase 4.7 升级：区分 KB / Web / Benchmark） */}
         {hasCalibrations && (
           <div className="pt-1">
             <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
               <BookOpen className="h-3.5 w-3.5" />
-              知识库引用
+              引用来源
             </div>
-            <div className="mt-1.5 space-y-1">
-              {calibrations.slice(0, 2).map((cal, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5"
-                >
-                  <span className="text-xs text-gray-500">
-                    {cal.metadata?.topic || cal.id}
-                  </span>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                    相关度 {(cal.distance * 100).toFixed(0)}%
-                  </Badge>
-                </div>
-              ))}
+            <div className="mt-1.5 space-y-1.5">
+              {calibrations.slice(0, 3).map((cal, i) => {
+                const citation = cal.citation
+                const sourceType = citation?.source_type || 'kb'
+                const isWeb = sourceType === 'web'
+                const isBenchmark = sourceType === 'benchmark'
+
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-md px-2.5 py-1.5 text-xs ${
+                      isWeb
+                        ? 'bg-emerald-50'
+                        : isBenchmark
+                          ? 'bg-violet-50'
+                          : 'bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {isWeb ? (
+                        <Globe className="h-3 w-3 shrink-0 text-emerald-500" />
+                      ) : isBenchmark ? (
+                        <BarChart3 className="h-3 w-3 shrink-0 text-violet-500" />
+                      ) : (
+                        <BookOpen className="h-3 w-3 shrink-0 text-gray-400" />
+                      )}
+                      <span className="font-medium text-gray-700 truncate">
+                        {citation?.title || cal.metadata?.topic || cal.id}
+                      </span>
+                      {citation?.confidence !== null && citation?.confidence !== undefined && (
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] px-1 py-0 h-4 shrink-0 ml-auto"
+                        >
+                          {Math.round((citation.confidence || 0) * 100)}%
+                        </Badge>
+                      )}
+                      {!citation && cal.distance !== undefined && (
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] px-1 py-0 h-4 shrink-0 ml-auto"
+                        >
+                          相关度 {(cal.distance * 100).toFixed(0)}%
+                        </Badge>
+                      )}
+                    </div>
+                    {citation?.snippet && (
+                      <p className="mt-1 text-[11px] text-gray-500 leading-relaxed line-clamp-2">
+                        {citation.snippet}
+                      </p>
+                    )}
+                    {isWeb && citation?.url && (
+                      <a
+                        href={citation.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] text-emerald-600 hover:text-emerald-700"
+                      >
+                        <Link2 className="h-2.5 w-2.5" />
+                        查看来源
+                      </a>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -560,6 +620,138 @@ function SynthesisSection({
           <p className="text-xs text-gray-400 border-t pt-3">
             {synthesis.data_source_summary}
           </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/** 引用来源汇总区块（Phase 4.7） */
+function CitationsSection({
+  citations,
+}: {
+  citations: import('@/types/api').Citation[]
+}) {
+  // 按来源类型分组
+  const kbCitations = citations.filter((c) => c.source_type === 'kb')
+  const webCitations = citations.filter((c) => c.source_type === 'web')
+  const benchmarkCitations = citations.filter(
+    (c) => c.source_type === 'benchmark'
+  )
+
+  const hasAny =
+    kbCitations.length > 0 ||
+    webCitations.length > 0 ||
+    benchmarkCitations.length > 0
+
+  if (!hasAny) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <BookOpen className="h-4 w-4 text-gray-500" />
+          引用来源
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+            {citations.length} 条
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* 知识库引用 */}
+        {kbCitations.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <BookOpen className="h-3.5 w-3.5" />
+              知识库（{kbCitations.length}）
+            </p>
+            <div className="space-y-1.5">
+              {kbCitations.map((c, i) => (
+                <div
+                  key={i}
+                  className="rounded-md bg-gray-50 px-3 py-2 text-xs"
+                >
+                  <p className="font-medium text-gray-700">{c.title}</p>
+                  {c.snippet && (
+                    <p className="mt-0.5 text-gray-500 line-clamp-2">
+                      {c.snippet}
+                    </p>
+                  )}
+                  {c.category && (
+                    <Badge
+                      variant="outline"
+                      className="mt-1 text-[10px] px-1 py-0 h-4"
+                    >
+                      {c.category}
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Web 引用 */}
+        {webCitations.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <Globe className="h-3.5 w-3.5 text-emerald-500" />
+              Web 搜索（{webCitations.length}）
+            </p>
+            <div className="space-y-1.5">
+              {webCitations.map((c, i) => (
+                <div
+                  key={i}
+                  className="rounded-md bg-emerald-50 px-3 py-2 text-xs"
+                >
+                  <p className="font-medium text-gray-700">{c.title}</p>
+                  {c.snippet && (
+                    <p className="mt-0.5 text-gray-500 line-clamp-2">
+                      {c.snippet}
+                    </p>
+                  )}
+                  {c.url && (
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700"
+                    >
+                      <Link2 className="h-2.5 w-2.5" />
+                      {c.url.length > 50
+                        ? c.url.slice(0, 50) + '...'
+                        : c.url}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 基准数据引用 */}
+        {benchmarkCitations.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <BarChart3 className="h-3.5 w-3.5 text-violet-500" />
+              行业基准（{benchmarkCitations.length}）
+            </p>
+            <div className="space-y-1.5">
+              {benchmarkCitations.map((c, i) => (
+                <div
+                  key={i}
+                  className="rounded-md bg-violet-50 px-3 py-2 text-xs"
+                >
+                  <p className="font-medium text-gray-700">{c.title}</p>
+                  {c.snippet && (
+                    <p className="mt-0.5 text-gray-500 line-clamp-2">
+                      {c.snippet}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

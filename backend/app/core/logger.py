@@ -1,6 +1,6 @@
 """
 结构化日志配置
-使用 structlog 输出 JSON 格式日志，方便后续收集和分析
+使用 structlog 输出 JSON 格式日志。
 """
 import logging
 import sys
