@@ -55,23 +55,31 @@
                                     │
           ┌─────────────────────────┼─────────────────────────┐
           ▼                         ▼                         ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   Multi-Agent    │    │   MCP 工具层      │    │   RAG 知识层      │
-│   分析引擎        │    │                  │    │                  │
-│                  │    │  github-mcp      │    │  ChromaDB        │
-│ ┌──────────────┐ │    │  filesystem-mcp  │    │  历史报告库       │
-│ │社区健康Agent │ │    │  search-mcp      │    │  评估方法论       │
-│ └──────────────┘ │    │  osv-mcp         │    │  行业基准数据     │
-│ ┌──────────────┐ │    │  code-analysis   │    │  失败案例库       │
-│ │代码质量Agent │ │    │                  │    │                  │
-│ └──────────────┘ │    └──────────────────┘    └──────────────────┘
-│ ┌──────────────┐ │
-│ │安全分析Agent │ │
-│ └──────────────┘ │
-│ ┌──────────────┐ │
-│ │技术演进Agent │ │
-│ └──────────────┘ │
-└──────────────────┘
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────────────────┐
+│   Multi-Agent    │    │   MCP 工具层      │    │      RAG 知识层（Phase 4）      │
+│   分析引擎        │    │                  │    │                              │
+│                  │    │  github-mcp      │    │  ┌──────────────────────────┐  │
+│ ┌──────────────┐ │    │  filesystem-mcp  │    │  │   语义分块（810 chunk）    │  │
+│ │社区健康Agent │ │    │  search-mcp      │    │  │   MarkdownChunker         │  │
+│ └──────────────┘ │    │  osv-mcp         │    │  └──────────────────────────┘  │
+│ ┌──────────────┐ │    │  code-analysis   │    │              │                 │
+│ │代码质量Agent │ │    │                  │    │  ┌───────────┴───────────┐     │
+│ └──────────────┘ │    └──────────────────┘    │  ▼                       ▼     │
+│ ┌──────────────┐ │                            │ 向量检索(ChromaDB)    BM25检索  │
+│ │安全分析Agent │ │                            │ (语义相似度)         (关键词)   │
+│ └──────────────┘ │                            │              │                 │
+│ ┌──────────────┐ │                            │         RRF 融合              │
+│ │技术演进Agent │ │                            │         TOP-20 候选            │
+│ └──────────────┘ │                            │              │                 │
+└──────────────────┘                            │    CrossEncoder 重排序         │
+                                                │    (ms-marco-MiniLM-L-6-v2)    │
+                                                │              │                 │
+                                                │       Self-RAG 自验证          │
+                                                │    (LLM 验证→扩展→再验证)       │
+                                                │              │                 │
+                                                │    Web 搜索 fallback            │
+                                                │    (Serper API，实时外部数据)    │
+                                                └──────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -88,15 +96,21 @@
 ```
 1. 用户提交 repo URL
 2. Orchestrator 解析仓库标识（owner/repo）
-3. 并行触发：
+3. 并行触发数据采集：
    a. GitHub MCP 采集元数据（stars/forks/issues/PRs/commits/contributors/releases）
    b. Filesystem MCP 克隆仓库到本地
    c. OSV MCP 查询已知漏洞
+   d. search-mcp 检索项目相关新闻（Phase 5）
 4. 数据就绪后，并行调度 4 个分析 Agent
-5. 各 Agent 产出结构化分析结果
-6. Orchestrator 汇总，RAG 检索历史基准进行校准
-7. 综合报告 Agent 生成最终尽调报告
-8. 报告持久化，推送给用户
+5. 各 Agent 调用 RAG 知识库进行基准校准（Phase 4 完整流程）：
+   a. 语义检索：向量检索 TOP-20 + BM25 TOP-20 → RRF 融合
+   b. 重排序：CrossEncoder 对候选精细打分 → TOP-5
+   c. Self-RAG 验证：LLM 判断相关性 → 不通过则查询扩展/Web fallback
+   d. 返回带引用的校准数据（来源文档 + chunk ID）
+6. 各 Agent 产出结构化分析结果（含 reasoning + RAG 引用）
+7. Orchestrator 汇总，冲突消解
+8. 综合报告 Agent 生成最终尽调报告
+9. 报告持久化，推送给用户
 ```
 
 ---
@@ -110,10 +124,14 @@
 | 编程语言 | Python 3.12 | Agent 生态成熟，异步支持好 |
 | 后端框架 | FastAPI | 原生异步、自动文档、类型安全 |
 | Agent 编排 | 手写 ReAct Loop | 避免 LangChain/LangGraph 的过度抽象，核心逻辑可控，面试可深入讲解 |
-| LLM | Claude 3.5 Sonnet / GPT-4o | 推理能力足够，成本可控 |
+| LLM | Kimi k2.6 / DeepSeek v4 Pro | 推理能力足够，中文支持好，成本可控 |
 | MCP 协议 | 官方 Python SDK (`mcp`) | 标准化工具接入 |
 | RAG 向量库 | ChromaDB | 轻量、本地可运行、无需外部依赖 |
 | Embedding | sentence-transformers (`all-MiniLM-L6-v2`) | 本地推理、无 API 成本 |
+| 混合检索 | `rank-bm25` + RRF 融合 | 弥补纯向量检索的关键词匹配盲区 |
+| 重排序 | CrossEncoder (`ms-marco-MiniLM-L-6-v2`) | 对召回结果精细打分，提升 TOP-3 相关性 |
+| 自验证 | Self-RAG (LLM 自验证 + 查询扩展) | 检索质量自检，低相关时自动扩展/Web fallback |
+| Web 搜索 | Serper API | 知识库覆盖不足时的实时外部数据 fallback |
 | 主数据库 | PostgreSQL 16 | 关系型数据、JSONB 支持半结构化指标 |
 | 缓存 | Redis 7 | API 限频缓存、热点数据、任务状态 |
 | 任务队列 | Celery + Redis Broker | 成熟稳定，支持定时任务（巡检） |
@@ -141,6 +159,7 @@ mcp>=1.0.0
 # RAG
 chromadb>=0.6.0
 sentence-transformers>=3.0.0
+rank-bm25>=0.2.0  # Phase 4.4: BM25 混合检索
 
 # 数据库 & 缓存
 sqlalchemy[asyncio]>=2.0.0
@@ -369,13 +388,15 @@ class AutonomousAgent:
 
 ### 6.1 知识库内容
 
-| 类别 | 内容 | 更新频率 |
-|-----|------|---------|
-| 评估方法论 | OpenSSF Scorecard 标准、CNCF 毕业标准、Google SRE 最佳实践 | 手动 |
-| 行业基准 | 各类型项目（前端框架、后端框架、工具库）的平均指标 | 每月计算 |
-| 历史报告 | 过往尽调报告（脱敏后） | 每次分析后 |
-| 失败案例 | left-pad、Faker.js、colors.js、event-stream 等事件分析 | 手动 |
-| 竞品映射 | 常见技术选型场景下的竞品关系（如 Next.js vs Nuxt） | 手动 |
+| 类别 | 内容 | 规模 | 更新频率 |
+|-----|------|------|---------|
+| 评估方法论 | CHAOSS 指标(80)、OpenSSF Scorecard 检查项(20) | 100 篇 | 手动 |
+| 安全标准 | OWASP 安全指南(48) | 48 篇 | 手动 |
+| 项目治理 | Python/Kubernetes/Rust 等知名项目治理文档(10) | 10 篇 | 手动 |
+| 行业基准 | OpenSSF Scorecard API 采集 41 个项目，117 条基准 | 结构化数据 | 每月 |
+| 失败案例 | left-pad、Faker.js、colors.js、event-stream 等事件分析 | 4 篇 | 手动 |
+| 竞品映射 | 前端框架、后端框架、状态管理库等竞品关系 | 3 篇 | 手动 |
+| **合计** | | **167 篇 / 810 chunk** | |
 
 ### 6.2 RAG 使用场景
 
@@ -384,11 +405,44 @@ class AutonomousAgent:
 3. **评估方法引用**："OpenSSF Scorecard 对安全更新的标准是什么？" → 检索方法论
 4. **报告生成**："生成一份类似上季度评估 React 的报告结构" → 检索历史报告模板
 
-### 6.3 文档分块策略
+### 6.3 生产级 RAG 架构（Phase 4 实现）
 
-- 方法论文档：按章节分块（512 tokens）
-- 历史报告：按"项目概述 + 各维度分析 + 结论"分块
-- 失败案例：按事件分块（背景 → 征兆 → 影响 → 教训）
+```
+用户查询
+   ↓
+[阶段 1] 语义分块（Phase 4.3）
+   └── 167 篇文档 → 810 个 chunk（按 Markdown 标题边界，20% 重叠）
+   ↓
+[阶段 2] 混合检索（Phase 4.4）
+   ├── 向量检索(ChromaDB) → TOP-20（语义相似度）
+   └── BM25 检索(倒排索引) → TOP-20（精确关键词匹配）
+          ↓
+     RRF 融合（Reciprocal Rank Fusion, k=60）→ TOP-20
+   ↓
+[阶段 3] 交叉编码器重排序（Phase 4.5）
+   └── CrossEncoder(ms-marco-MiniLM-L-6-v2) 对 20 个候选逐一打分
+          ↓
+     按 rerank_score 降序 → TOP-5
+   ↓
+[阶段 4] Self-RAG 自验证（Phase 4.6）
+   ├── LLM 判断：检索结果是否真正回答了查询？
+   ├── 不通过 → 查询扩展（LLM 生成 3 个扩展查询）→ 重新检索 → 再验证
+   └── 仍不通过 → Web 搜索 fallback（Serper API）
+   ↓
+[阶段 5] 引用追踪（Phase 4.7，待实现）
+   └── 每条结论标注来源文档 ID + chunk ID + 段落
+   ↓
+     返回 Agent
+```
+
+### 6.4 文档分块策略
+
+- **分块方式**：按 `##` / `###` Markdown 标题边界拆分
+- **chunk 大小**：目标 300-500 tokens（1200~2000 字符），最大不超过 800 tokens
+- **重叠窗口**：相邻 chunk 保留 20% 重叠，防止上下文断裂
+- **元数据**：每个 chunk 携带 {source_file, section_title, category, topic, chunk_index, total_chunks}
+- **内容过滤**：自动过滤图片引用、Figure 说明、贡献者列表等低价值内容
+- **小文档直通**：整篇 < 1600 字符时不拆分
 
 ---
 
@@ -1044,6 +1098,10 @@ DEFAULT_LLM_MODEL=
 # GitHub
 GITHUB_TOKEN=ghp_...  # 提高 API 限频
 
+# Phase 4.6: Web 搜索 Fallback（Serper API，可选）
+# https://serper.dev/ 每月 2500 次免费查询
+SERPER_API_KEY=
+
 # 应用
 DEBUG=false
 LOG_LEVEL=INFO
@@ -1094,16 +1152,21 @@ osscout/
 │   │   │   ├── __init__.py
 │   │   │   ├── client.py         # MCP Client 封装
 │   │   │   ├── servers/          # MCP Server 实现
-│   │   │   │   ├── github_mcp/
-│   │   │   │   ├── filesystem_mcp/
-│   │   │   │   ├── search_mcp/
-│   │   │   │   ├── osv_mcp/
-│   │   │   │   └── code_analysis_mcp/
+│   │   │   │   ├── github_mcp/       # GitHub API 数据采集
+│   │   │   │   ├── filesystem_mcp/   # 仓库克隆与本地文件操作
+│   │   │   │   ├── search_mcp/       # Web 搜索（Serper API，Phase 4.6）
+│   │   │   │   ├── osv_mcp/          # 开源漏洞数据库查询
+│   │   │   │   └── code_analysis_mcp/  # 静态代码分析（Semgrep/radon）
 │   │   ├── rag/
 │   │   │   ├── __init__.py
 │   │   │   ├── vector_store.py   # ChromaDB 封装
-│   │   │   ├── embeddings.py     # Embedding 模型
-│   │   │   └── query.py          # RAG 查询
+│   │   │   ├── embeddings.py     # Embedding 模型（Bi-Encoder）
+│   │   │   ├── chunking.py       # Markdown 语义分块器（Phase 4.3）
+│   │   │   ├── hybrid_retriever.py  # 混合检索：向量 + BM25 + RRF（Phase 4.4）
+│   │   │   ├── reranker.py       # 交叉编码器重排序（Phase 4.5）
+│   │   │   ├── self_rag.py       # Self-RAG 自验证 + 查询扩展（Phase 4.6）
+│   │   │   ├── web_search.py     # Web 搜索 fallback（Serper API）（Phase 4.6）
+│   │   │   └── query.py          # RAG 查询引擎（高层封装）
 │   │   ├── services/
 │   │   │   ├── __init__.py
 │   │   │   ├── github_service.py
@@ -1152,7 +1215,7 @@ osscout/
 │   ├── filesystem-mcp/
 │   ├── osv-mcp/
 │   └── code-analysis-mcp/
-│   # search-mcp/  — 未实现（Phase 4 Self-RAG fallback 时引入）
+│   # search-mcp/  — Phase 4.6 已实现（Serper API Web 搜索）
 │
 ├── knowledge-base/            # RAG 知识库文档
 │   ├── methodology/           # 评估方法论

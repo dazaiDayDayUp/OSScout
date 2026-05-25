@@ -10,6 +10,7 @@
 
 from app.core.logger import get_logger
 
+from .hybrid_retriever import HybridRetriever
 from .vector_store import VectorStore
 
 logger = get_logger(__name__)
@@ -22,6 +23,9 @@ class RAGQueryEngine:
     """RAG 查询引擎
 
     封装向量库的检索逻辑，提供面向业务场景的查询方法。
+    Phase 4.4 起默认启用混合检索（向量 + BM25 + RRF），
+    可通过 use_hybrid=False 回退到纯向量检索。
+
     所有检索结果按相似度排序（distance 越小越相似）。
     """
 
@@ -29,16 +33,27 @@ class RAGQueryEngine:
         self,
         vector_store: VectorStore | None = None,
         collection_name: str = "osscout_kb",
+        use_hybrid: bool = True,
     ) -> None:
         """初始化查询引擎
 
         Args:
             vector_store: 向量库实例，None 时自动创建
             collection_name: 自动创建向量库时使用的集合名称
+            use_hybrid: 是否启用混合检索（向量 + BM25 + RRF）
         """
         if vector_store is None:
             vector_store = VectorStore(collection_name=collection_name)
         self.vector_store = vector_store
+
+        # Phase 4.4：混合检索
+        self._hybrid: HybridRetriever | None = None
+        if use_hybrid:
+            try:
+                self._hybrid = HybridRetriever(vector_store=vector_store)
+                logger.info("RAG 查询引擎已启用混合检索")
+            except Exception as e:
+                logger.warning("混合检索初始化失败，回退到纯向量检索", error=str(e))
 
     # ------------------------------------------------------------------
     # 通用检索接口
@@ -50,7 +65,7 @@ class RAGQueryEngine:
         category: str | None = None,
         n_results: int = DEFAULT_TOP_K,
     ) -> list[dict]:
-        """通用语义检索
+        """通用检索（Phase 4.4 起默认使用混合检索）
 
         Args:
             query_text: 查询文本
@@ -64,22 +79,31 @@ class RAGQueryEngine:
                 "content": "文档内容",
                 "metadata": {"category": "...", "topic": "..."},
                 "distance": 0.15,  # 余弦距离，越小越相似
+                "rrf_score": 0.0321,  # 混合检索时附加的 RRF 融合分数
             }
         """
-        filter_dict = {"category": category} if category else None
-
         logger.info(
             "执行 RAG 检索",
             query=query_text[:80],
             category=category,
             n_results=n_results,
+            hybrid=self._hybrid is not None,
         )
 
-        results = self.vector_store.search(
-            query_text=query_text,
-            n_results=n_results,
-            filter_dict=filter_dict,
-        )
+        # Phase 4.4：优先使用混合检索
+        if self._hybrid is not None:
+            results = self._hybrid.search(
+                query_text=query_text,
+                n_results=n_results,
+                category=category,
+            )
+        else:
+            filter_dict = {"category": category} if category else None
+            results = self.vector_store.search(
+                query_text=query_text,
+                n_results=n_results,
+                filter_dict=filter_dict,
+            )
 
         logger.info(
             "RAG 检索完成",

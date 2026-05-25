@@ -36,3 +36,8 @@ celery[redis]>=5.4.0
 openai>=1.60.0
 chromadb>=0.6.0
 sentence-transformers>=3.0.0
+
+# Phase 4.4: 混合检索 (BM25 + RRF 融合)
+rank-bm25>=0.2.0
+
+# Phase 4.5: 重排序 (CrossEncoder，sentence-transformers 已包含，无需额外安装)

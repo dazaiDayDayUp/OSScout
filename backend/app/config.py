@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # === GitHub ===
     github_token: str = ""  # 用于提高 API 限频
 
+    # === Phase 4.6: Web 搜索 Fallback ===
+    # Serper API Key: https://serper.dev/（每月 2500 次免费查询）
+    serper_api_key: str = ""
+
 
 # 全局配置实例，按需导入使用
 settings = Settings()
@@ -59,3 +63,5 @@ settings = Settings()
 # MCP Server 通过 stdio 启动，env={**os.environ} 复制父进程环境变量
 if settings.github_token:
     os.environ["GITHUB_TOKEN"] = settings.github_token
+if settings.serper_api_key:
+    os.environ["SERPER_API_KEY"] = settings.serper_api_key
