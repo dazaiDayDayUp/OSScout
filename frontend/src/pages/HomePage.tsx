@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { GitBranch, Loader2, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
+import { GitBranch, Loader2, CheckCircle, AlertCircle, ArrowRight, Mail } from 'lucide-react'
 
 /** 示例仓库 */
 const EXAMPLE_REPOS = [
@@ -32,6 +32,7 @@ const EXAMPLE_REPOS = [
 export default function HomePage() {
   const navigate = useNavigate()
   const [repoUrl, setRepoUrl] = useState('')
+  const [notifyEmail, setNotifyEmail] = useState('')
   const [taskId, setTaskId] = useState<number | null>(null)
   const [submittedUrl, setSubmittedUrl] = useState('')
 
@@ -58,9 +59,15 @@ export default function HomePage() {
 
     setSubmittedUrl(repoUrl.trim())
     try {
-      const result = await submitMutation.mutateAsync({
+      const payload: { repo_url: string; notify_email?: string } = {
         repo_url: repoUrl.trim(),
-      })
+      }
+      // 仅在填写了有效邮箱时才带上 notify_email
+      const email = notifyEmail.trim()
+      if (email && email.includes('@')) {
+        payload.notify_email = email
+      }
+      const result = await submitMutation.mutateAsync(payload)
       setTaskId(result.task_id)
     } catch {
       // 错误已在 mutation 中处理，此处只需让 UI 展示错误状态
@@ -139,6 +146,19 @@ export default function HomePage() {
               </Button>
             </div>
 
+            {/* 邮箱通知（可选） */}
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-gray-400" />
+              <Input
+                type="email"
+                placeholder="分析完成后邮件通知我（可选）"
+                value={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.value)}
+                disabled={isSubmitting || isPolling}
+                className="flex-1 text-sm"
+              />
+            </div>
+
             {/* 提交错误提示 */}
             {submitMutation.isError && (
               <Alert variant="destructive">
@@ -163,6 +183,12 @@ export default function HomePage() {
                   <p className="text-xs text-gray-500">
                     任务 ID: {task.task_id}
                   </p>
+                  {notifyEmail.trim() && (
+                    <p className="flex items-center gap-1 text-xs text-blue-600">
+                      <Mail className="h-3 w-3" />
+                      分析完成后将邮件通知: {notifyEmail.trim()}
+                    </p>
+                  )}
                 </div>
                 {(() => {
                   const { label, color, icon: StatusIcon } = getStatusDisplay(task.status)

@@ -32,3 +32,4 @@ celery_app.conf.update(
 # 显式导入任务模块，确保 Celery 注册任务
 # autodiscover_tasks 适用于 Django，纯 FastAPI 项目需手动导入
 import app.tasks.analysis_tasks  # noqa: F401
+import app.tasks.email_tasks  # noqa: F401

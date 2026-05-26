@@ -26,7 +26,11 @@ class AnalysisService:
         """初始化，注入数据库会话"""
         self.session = session
 
-    async def submit_analysis(self, repo_url: str) -> AnalysisTask:
+    async def submit_analysis(
+        self,
+        repo_url: str,
+        notify_email: str | None = None,
+    ) -> AnalysisTask:
         """
         提交分析任务
 
@@ -39,6 +43,7 @@ class AnalysisService:
 
         Args:
             repo_url: GitHub 仓库地址
+            notify_email: 分析完成后接收邮件通知的邮箱地址（可选）
 
         Returns:
             AnalysisTask: 新创建的任务记录
@@ -53,6 +58,7 @@ class AnalysisService:
             repo_id=repository.id,
             status=TaskStatus.RUNNING,
             started_at=datetime.utcnow(),
+            notify_email=notify_email,
         )
         self.session.add(task)
         await self.session.commit()

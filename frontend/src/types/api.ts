@@ -23,6 +23,7 @@ export interface PaginationMeta {
 /** 提交分析任务请求 */
 export interface AnalyzeRequest {
   repo_url: string
+  notify_email?: string
 }
 
 /** 提交分析任务响应 */

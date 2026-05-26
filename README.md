@@ -4,7 +4,7 @@
 
 输入一个 GitHub 仓库地址，LLM 自主规划分析路径、自主调用工具采集数据、自主检索权威知识库做基准对比，最终输出一份覆盖社区健康、代码质量、安全风险、技术演进四个维度的结构化尽调报告。
 
-**核心差异化**：规则评分打底 + **LLM 自主规划与工具调用** + **生产级 RAG 知识库** + 综合报告生成。
+**核心差异化**：规则评分打底 + **LLM 自主规划与工具调用** + **生产级 RAG 知识库** + 综合报告生成 + **分析完成邮件推送**。
 
 ## 当前进展
 
@@ -22,13 +22,17 @@
 # 1. 启动数据库 + Redis（Docker）
 docker-compose -f docker-compose.dev.yml up db redis
 
-# 2. 启动后端 FastAPI
+# 2. 配置环境变量
+cp .env.example backend/.env
+# 编辑 backend/.env，填入你的 API Key（GitHub / Kimi / DeepSeek / QQ 邮箱授权码）
+
+# 3. 启动后端 FastAPI
 cd backend && ./venv/Scripts/python.exe -m uvicorn app.main:app --reload
 
-# 3. 启动 Celery Worker（必须启动，否则任务永远卡在 running）
+# 4. 启动 Celery Worker（必须启动，否则任务永远卡在 running）
 cd backend && ./venv/Scripts/python.exe -m celery -A app.core.celery_app worker --loglevel=info --pool=solo
 
-# 4. 启动前端 React
+# 5. 启动前端 React
 cd frontend && npm run dev
 ```
 
@@ -48,6 +52,7 @@ API 文档：`http://localhost:8000/docs`
 - **LLM**：Kimi (`kimi-k2.6`) + DeepSeek (`deepseek-v4-pro`)
 - **RAG**：ChromaDB + sentence-transformers + BM25 + Cross-Encoder Rerank（Phase 4）
 - **前端**：React 19 + TypeScript 5.8 + TailwindCSS v4 + shadcn/ui + Recharts
+- **邮件推送**：FastAPI-Mail + Celery 异步任务（分析完成后自动发送 HTML 邮件报告）
 - **部署**：Docker Compose（后续优化阶段）
 
 ## 开发计划

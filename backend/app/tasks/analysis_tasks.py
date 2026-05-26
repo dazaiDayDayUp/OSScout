@@ -122,6 +122,12 @@ async def _async_run_analysis(
 
         await session.commit()
 
+        # 触发邮件通知（如果用户提供了邮箱）
+        if task and task.notify_email:
+            # 延迟导入避免循环引用（email_tasks 也依赖 celery_app）
+            from app.tasks.email_tasks import send_report_email
+            send_report_email.delay(task_id)
+
 
 async def _async_mark_failed(task_id: int, error_msg: str) -> None:
     """异步标记任务失败"""

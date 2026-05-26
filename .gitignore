@@ -4,6 +4,7 @@ PROJECT_PLAN.md
 
 # 环境变量（包含敏感信息，绝不能提交）
 .env
+backend/.env
 
 # === Python ===
 # 虚拟环境

@@ -19,7 +19,7 @@ async def collect_security_data(owner: str, repo: str) -> dict[str, Any]:
         repo: 仓库名称
 
     Returns:
-        {
+        {  
             "license": {"spdx_id": str, "name": str, "url": str|None},
             "dependencies": [{"name": str, "ecosystem": str, "version": str|None}, ...],
             "vulnerability_count": int,

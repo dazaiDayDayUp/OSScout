@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSScout 尽调报告 - {{ repo_name }}</title>
+    <style>
+        /* 邮件客户端兼容的基础样式 */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #333;
+        }
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .header .subtitle {
+            color: rgba(255,255,255,0.75);
+            margin-top: 6px;
+            font-size: 13px;
+        }
+        .content {
+            padding: 28px 24px;
+        }
+        .section {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e3a5f;
+            margin-bottom: 14px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        /* 综合评分卡片 */
+        .score-card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        .score-ring {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 12px;
+        }
+        .score-ring-bg {
+            fill: none;
+            stroke: #e2e8f0;
+            stroke-width: 8;
+        }
+        .score-ring-progress {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transform: rotate(-90deg);
+            transform-origin: 60px 60px;
+            transition: stroke-dashoffset 0.8s ease;
+        }
+        .score-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1e3a5f;
+            line-height: 1;
+        }
+        .score-rating {
+            display: inline-block;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 8px;
+        }
+        .score-rating.a-plus { background-color: #2d8a4e; }
+        .score-rating.a { background-color: #4CAF50; }
+        .score-rating.b-plus { background-color: #f0ad4e; }
+        .score-rating.b { background-color: #ffc107; color: #333; }
+        .score-rating.c { background-color: #ff9800; }
+        .score-rating.d { background-color: #e74c3c; }
+
+        /* 仓库信息 */
+        .repo-info {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px 20px;
+            border: 1px solid #e2e8f0;
+        }
+        .repo-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .repo-info td {
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .repo-info td:first-child {
+            color: #64748b;
+            width: 80px;
+        }
+        .repo-info td:last-child {
+            color: #1e293b;
+            font-weight: 500;
+        }
+
+        /* 维度评分条 */
+        .dimension-row {
+            margin-bottom: 16px;
+        }
+        .dimension-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .dimension-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+        }
+        .dimension-score {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e3a5f;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 10px;
+            background-color: #e2e8f0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+        }
+
+        /* 列表样式 */
+        .item-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .item-list li {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #475569;
+        }
+        .finding-item::marker {
+            color: #3b82f6;
+        }
+        .risk-item::marker {
+            color: #e74c3c;
+        }
+
+        /* 按钮 */
+        .btn-primary {
+            display: inline-block;
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        /* Footer */
+        .footer {
+            background-color: #f8fafc;
+            padding: 20px 24px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+        .footer p {
+            margin: 0;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .footer .brand {
+            font-weight: 600;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+        <tr>
+            <td align="center" style="padding: 20px 0; background-color: #f0f2f5;">
+                <div class="container">
+
+                    <!-- Header -->
+                    <div class="header">
+                        <h1>OSScout 开源尽调报告</h1>
+                        <p class="subtitle">Open Source Due Diligence Report</p>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="content">
+
+                        <!-- 综合评分 -->
+                        <div class="section">
+                            <div class="section-title">综合评分</div>
+                            <div class="score-card">
+                                <!-- SVG 环形图 -->
+                                <svg class="score-ring" viewBox="0 0 120 120">
+                                    <circle class="score-ring-bg" cx="60" cy="60" r="52"/>
+                                    <circle
+                                        class="score-ring-progress"
+                                        cx="60" cy="60" r="52"
+                                        stroke="{{ score_color }}"
+                                        stroke-dasharray="{{ circumference }}"
+                                        stroke-dashoffset="{{ stroke_dashoffset }}"
+                                    />
+                                    <text x="60" y="58" text-anchor="middle" class="score-value" fill="#1e3a5f">{{ overall_score }}</text>
+                                    <text x="60" y="78" text-anchor="middle" fill="#64748b" font-size="11">满分 100</text>
+                                </svg>
+                                <div>
+                                    <span class="score-rating {{ rating_class }}">{{ overall_rating }}</span>
+                                </div>
+                                <p style="margin-top: 12px; font-size: 13px; color: #64748b;">
+                                    {{ repo_owner }}/{{ repo_name }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 仓库信息 -->
+                        <div class="section">
+                            <div class="section-title">仓库信息</div>
+                            <div class="repo-info">
+                                <table>
+                                    <tr><td>仓库</td><td>{{ repo_owner }}/{{ repo_name }}</td></tr>
+                                    <tr><td>语言</td><td>{{ primary_language or "未知" }}</td></tr>
+                                    <tr><td>Stars</td><td>{{ "{:,}".format(star_count) if star_count else "-" }}</td></tr>
+                                    <tr><td>Forks</td><td>{{ "{:,}".format(fork_count) if fork_count else "-" }}</td></tr>
+                                    <tr><td>分析时间</td><td>{{ analyzed_at }}</td></tr>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 各维度评分 -->
+                        <div class="section">
+                            <div class="section-title">维度评分</div>
+                            {% for dim in dimensions %}
+                            <div class="dimension-row">
+                                <div class="dimension-header">
+                                    <span class="dimension-name">{{ dim.name }}</span>
+                                    <span class="dimension-score">{{ dim.score }} / {{ dim.max_score }}</span>
+                                </div>
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill" style="width: {{ dim.percentage }}%;"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- 关键发现 -->
+                        {% if key_findings %}
+                        <div class="section">
+                            <div class="section-title">关键发现</div>
+                            <ul class="item-list finding-item">
+                                {% for finding in key_findings %}
+                                <li>{{ finding }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+
+                        <!-- 风险提示 -->
+                        {% if recommendations %}
+                        <div class="section">
+                            <div class="section-title">风险提示与建议</div>
+                            <ul class="item-list risk-item">
+                                {% for rec in recommendations %}
+                                <li>{{ rec }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+
+                        <!-- 查看完整报告 -->
+                        <div class="section" style="text-align: center; padding-top: 8px;">
+                            <a href="{{ report_url }}" class="btn-primary">查看完整报告</a>
+                            <p style="margin-top: 10px; font-size: 11px; color: #94a3b8;">
+                                或复制链接到浏览器打开：<br>
+                                <span style="word-break: break-all;">{{ report_url }}</span>
+                            </p>
+                        </div>
+
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="footer">
+                        <p><span class="brand">OSScout</span> — 开源项目自动化尽调平台</p>
+                        <p style="margin-top: 4px;">本邮件由系统自动发送，请勿直接回复</p>
+                    </div>
+
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

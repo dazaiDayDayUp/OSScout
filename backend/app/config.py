@@ -55,6 +55,22 @@ class Settings(BaseSettings):
     # Serper API Key: https://serper.dev/（每月 2500 次免费查询）
     serper_api_key: str = ""
 
+    # === 邮件推送配置（FastAPI-Mail + QQ 邮箱 SMTP） ===
+    # QQ 邮箱 SMTP 设置：
+    #   SMTP 服务器：smtp.qq.com
+    #   端口：465（SSL）或 587（TLS）
+    #   密码：QQ 邮箱的「授权码」，不是登录密码
+    #   获取方式：QQ 邮箱设置 → 账户 → 开启 SMTP 服务 → 获取授权码
+    mail_username: str = ""           # QQ 邮箱地址，如 123456@qq.com
+    mail_password: str = ""           # QQ 邮箱授权码（不是登录密码）
+    mail_from: str = ""               # 发件人显示名称，默认与 mail_username 一致
+    mail_server: str = "smtp.qq.com"  # SMTP 服务器地址
+    mail_port: int = 465              # SMTP 端口（QQ 邮箱用 465 SSL）
+    mail_starttls: bool = False       # 是否启用 STARTTLS（QQ 邮箱用 SSL，此项为 False）
+    mail_ssl_tls: bool = True         # 是否启用 SSL/TLS（QQ 邮箱必须为 True）
+    mail_use_credentials: bool = True # 是否需要认证
+    mail_validate_certs: bool = True  # 是否验证 SSL 证书
+
 
 # 全局配置实例，按需导入使用
 settings = Settings()

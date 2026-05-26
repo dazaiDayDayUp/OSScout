@@ -69,6 +69,9 @@ class AnalysisTask(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notify_email: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )  # 分析完成后邮件通知的收件地址
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # 关联关系

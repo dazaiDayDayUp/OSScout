@@ -24,6 +24,11 @@ class AnalyzeRequest(BaseModel):
         description="GitHub 仓库地址，例如 https://github.com/python-poetry/poetry",
         examples=["https://github.com/python-poetry/poetry"],
     )
+    notify_email: str | None = Field(
+        default=None,
+        description="分析完成后接收邮件通知的邮箱地址（可选）",
+        examples=["user@example.com"],
+    )
 
 
 class AnalyzeResponse(BaseModel):
@@ -81,7 +86,10 @@ async def analyze(
 
     try:
         service = AnalysisService(session)
-        task = await service.submit_analysis(request.repo_url.strip())
+        task = await service.submit_analysis(
+            request.repo_url.strip(),
+            notify_email=request.notify_email,
+        )
     except ValueError as exc:
         # parse_repo_url 抛出的格式错误
         raise HTTPException(status_code=400, detail=str(exc))
