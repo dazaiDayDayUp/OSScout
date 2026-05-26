@@ -135,7 +135,7 @@ class LLMEnhancer:
             logger.info(
                 "LLM 推理增强完成",
                 dimension=dimension,
-                reasoning_preview=result.reasoning[:60],
+                reasoning=result.reasoning,
                 additional_findings=len(result.additional_findings),
                 additional_risks=len(result.additional_risks),
             )

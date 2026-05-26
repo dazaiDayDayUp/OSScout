@@ -168,9 +168,8 @@ class KimiProvider(_OpenAICompatibleProvider):
         """
         # k2 系列思考模型强制 temperature=0.6（API 端最新限制）
         if self.model.startswith("kimi-k2") and temperature != 0.6:
-            logger.warning(
-                "kimi 思考模型强制使用 temperature=0.6，"
-                "自动修正传入值",
+            logger.debug(
+                "kimi 思考模型 temperature 自动修正为 0.6",
                 model=self.model,
                 requested_temperature=temperature,
             )

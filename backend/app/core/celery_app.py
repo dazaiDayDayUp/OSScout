@@ -27,6 +27,8 @@ celery_app.conf.update(
     task_time_limit=300,
     # 任务软超时：4 分钟（先抛 SoftTimeLimitExceeded 给优雅处理机会）
     task_soft_time_limit=240,
+    # 禁止 Celery 劫持 root logger，避免 structlog 日志级别被错误标记为 WARNING
+    worker_hijack_root_logger=False,
 )
 
 # 显式导入任务模块，确保 Celery 注册任务

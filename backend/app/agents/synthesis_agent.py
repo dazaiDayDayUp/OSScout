@@ -238,12 +238,15 @@ class SynthesisAgent:
 
         def dim_summary(name: str) -> dict:
             d = dims.get(name, {})
+            findings = d.get("findings", [])
+            risks = d.get("risks", [])
+            reasoning = d.get("reasoning") or "无"
             return {
                 "score": d.get("score", 0),
                 "percentage": d.get("percentage", 0),
-                "findings": "; ".join(d.get("findings", [])[:3]) or "无",
-                "risks": "; ".join(d.get("risks", [])[:3]) or "无",
-                "reasoning": (d.get("reasoning") or "无")[:200],
+                "findings": "; ".join(findings) or "无",
+                "risks": "; ".join(risks) or "无",
+                "reasoning": reasoning,
             }
 
         community = dim_summary("community")
