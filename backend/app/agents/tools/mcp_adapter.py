@@ -4,11 +4,20 @@ MCP Adapter
 将 MCP Server 的工具自动转换为 LLM Function Calling 的 Tool 对象。
 
 连接流程：
-1. async with MCPClient() as client:  进入 MCP Server 上下文
-2. adapter.discover_tools(client)      自动发现所有工具
-3. 每个 MCP Tool → Tool(name, description, parameters, handler, source=MCP)
-4. handler 内部调用 client.call_tool() 转发到 MCP Server
+1. adapter.discover_and_register(GitHubMCPClient)  传入 Client 类
+2. Adapter 内部 async with client_class() 连接 Server
+3. 自动发现所有工具，每个 MCP Tool → Tool(name, description, ..., source=MCP)
+4. handler 内部每次调用时新建 client 连接，转发到 MCP Server
+
+设计说明（Phase 5.2 重构）：
+- discover_and_register 接收 client_class（类）而非实例
+- 原因：_BaseMCPClient 采用"每个 async with 独立实例"设计，
+  实例在退出上下文后 disconnect。handler 闭包若捕获实例，
+  后续调用时 client 已断开。
+- 解决方案：handler 闭包捕获 client_class，每次调用时内部新建连接。
 """
+from typing import Type
+
 from app.core.logger import get_logger
 from app.mcp.client import _BaseMCPClient
 
@@ -34,13 +43,14 @@ class MCPAdapter:
 
     async def discover_and_register(
         self,
-        client: _BaseMCPClient,
+        client_class: Type[_BaseMCPClient],
         namespace: str | None = None,
     ) -> list[Tool]:
-        """从 MCP Client 发现所有工具并注册到 Registry
+        """从 MCP Client 类发现所有工具并注册到 Registry
 
         Args:
-            client: 已连接的 MCP Client 实例（必须在 async with 上下文中）
+            client_class: MCP Client 类（如 GitHubMCPClient），
+                          非实例。Adapter 内部自行实例化并连接。
             namespace: 命名空间前缀，如 "github"、"filesystem"。
                        如果不传，自动从 Client 类名推导。
 
@@ -49,15 +59,16 @@ class MCPAdapter:
         """
         # 自动推导命名空间
         if namespace is None:
-            namespace = self._derive_namespace(client)
+            namespace = self._derive_namespace(client_class)
 
-        # 获取 MCP Server 的完整工具信息
+        # 临时连接 Server，发现所有工具
         try:
-            mcp_tools = await client.list_tools_detailed()
+            async with client_class() as client:
+                mcp_tools = await client.list_tools_detailed()
         except Exception as e:
             logger.error(
                 "MCP 工具发现失败",
-                client_type=type(client).__name__,
+                client_class=client_class.__name__,
                 error=str(e),
             )
             return []
@@ -67,8 +78,8 @@ class MCPAdapter:
             # 构造工具全名：namespace.tool_name
             tool_name = f"{namespace}.{mcp_tool['name']}"
 
-            # 创建 handler（闭包，捕获 client 和原始 tool_name）
-            handler = self._make_handler(client, mcp_tool["name"])
+            # 创建 handler（闭包捕获 client_class，每次调用时新建连接）
+            handler = self._make_handler(client_class, mcp_tool["name"])
 
             tool = Tool(
                 name=tool_name,
@@ -77,7 +88,7 @@ class MCPAdapter:
                 handler=handler,
                 source=ToolSource.MCP,
                 metadata={
-                    "mcp_client_type": type(client).__name__,
+                    "mcp_client_class": client_class.__name__,
                     "mcp_tool_name": mcp_tool["name"],
                     "namespace": namespace,
                 },
@@ -89,20 +100,20 @@ class MCPAdapter:
         logger.info(
             "MCP 工具注册完成",
             namespace=namespace,
-            client_type=type(client).__name__,
+            client_class=client_class.__name__,
             tool_count=len(tools),
             tool_names=[t.name for t in tools],
         )
         return tools
 
     @staticmethod
-    def _derive_namespace(client: _BaseMCPClient) -> str:
+    def _derive_namespace(client_class: Type[_BaseMCPClient]) -> str:
         """从 Client 类名自动推导命名空间
 
         例如：GitHubMCPClient → github
               FilesystemMCPClient → filesystem
         """
-        class_name = type(client).__name__
+        class_name = client_class.__name__
         # 去掉 "MCPClient" / "Client" 后缀
         for suffix in ("MCPClient", "Client"):
             if class_name.endswith(suffix):
@@ -112,18 +123,19 @@ class MCPAdapter:
 
     @staticmethod
     def _make_handler(
-        client: _BaseMCPClient, original_tool_name: str
+        client_class: Type[_BaseMCPClient], original_tool_name: str
     ) -> callable:
         """创建 handler 闭包
 
-        handler 被 ToolExecutor 调用时，内部转发到 MCP Client 的 call_tool。
+        handler 被 ToolExecutor 调用时，内部新建 client 实例并连接，
+        然后转发到 MCP Client 的 call_tool。调用完成后自动清理。
         """
 
         async def handler(**kwargs) -> any:
-            return await client.call_tool(original_tool_name, kwargs)
+            async with client_class() as client:
+                return await client.call_tool(original_tool_name, kwargs)
 
-        # 复制原始函数的签名信息（用于 @tool 装饰器的 Schema 生成）
-        # 注意：这里 handler 的参数实际上由 Tool.parameters（JSON Schema）决定，
+        # handler 的参数由 Tool.parameters（JSON Schema）决定，
         # ToolExecutor 会根据 JSON Schema 的 properties 来传参，
         # 所以 handler 接受 **kwargs 即可。
         handler.__name__ = original_tool_name

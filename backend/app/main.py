@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.agents.tools import initialize_mcp_tools
 from app.api.v1 import api_router
 from app.core.database import init_db
 from app.core.logger import configure_logging, get_logger
@@ -27,6 +28,20 @@ async def lifespan(app: FastAPI):
     logger.info("应用启动中", version="0.1.0")
     await init_db()
     logger.info("数据库初始化完成")
+
+    # Phase 5.2: 注册所有 MCP Server 的工具
+    # 失败隔离：某个 Server 连接失败不影响其他 Server
+    try:
+        registered = await initialize_mcp_tools()
+        logger.info(
+            "MCP 工具注册完成",
+            total_tools=sum(len(tools) for tools in registered.values()),
+            namespaces=list(registered.keys()),
+        )
+    except Exception as e:
+        # MCP 工具注册失败不应阻止应用启动
+        logger.warning("MCP 工具注册异常，应用继续启动", error=str(e))
+
     yield
     logger.info("应用关闭")
 

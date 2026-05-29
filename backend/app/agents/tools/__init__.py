@@ -22,6 +22,7 @@ Agent 可调用的 Tool 集合（Phase 5 Function Calling 基础设施）
 
 from .executor import ToolExecutor
 from .mcp_adapter import MCPAdapter
+from .mcp_registry import get_mcp_tools_summary, initialize_mcp_tools
 from .rag_adapter import RAGAdapter
 from .registry import ToolRegistry, get_registry, tool
 from .tool import Tool, ToolExecutionResult, ToolSource
@@ -40,4 +41,7 @@ __all__ = [
     # Adapter
     "MCPAdapter",
     "RAGAdapter",
+    # MCP 批量注册
+    "initialize_mcp_tools",
+    "get_mcp_tools_summary",
 ]

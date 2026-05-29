@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-**Phase 0~4 全部完成，Phase 5.1 已完成。当前重点：Phase 5.2（MCP 工具注册表）。**
+**Phase 0~4 全部完成，Phase 5.1、5.2 已完成。当前重点：Phase 5.3（RAG 工具化）。**
 
 最近更新：2026-05-29
 
@@ -17,8 +17,8 @@
 | 子阶段 | 内容 | 状态 |
 |--------|------|------|
 | 5.1 | Function Calling 基础设施（Tool 协议 / Registry / Executor / MCP Adapter / RAG Adapter） | ✅ 已完成 |
-| 5.2 | MCP 工具注册表 | ⏳ 待开始 |
-| 5.3 | RAG 工具化 | ⏳ 待开始 |
+| **5.2** | **MCP 工具注册表** | **✅ 已完成** |
+| **5.3** | **RAG 工具化** | **⏳ 当前重点** |
 | 5.4 | Plan-and-Execute 编排引擎 | ⏳ 待开始 |
 | 5.5 | ReAct Loop 升级 | ⏳ 待开始 |
 | 5.6 | 动态分析流程（Single Master + Dynamic Specialist Pool） | ⏳ 待开始 |
@@ -42,10 +42,20 @@
 
 ---
 
+## Phase 5.2 成果摘要
+
+- **修复 `mcp_adapter.py` 的 handler 生命周期问题**：`discover_and_register` 改为接收 `client_class`（类）而非实例，handler 闭包捕获类并在每次调用时新建连接，与"每个 async with 独立实例"设计一致
+- **新增 `mcp_registry.py`**：统一批量注册入口
+  - `MCP_SERVER_CONFIGS`：声明式配置 4 个 Server
+  - `initialize_mcp_tools()`：并行注册，失败隔离
+  - `get_mcp_tools_summary()`：注册摘要查询
+- **修改 `main.py`**：应用启动时自动初始化 MCP 工具注册
+- **验证结果**：4/4 Server 全部成功，15 个 Tool 正确注册
+
 ## 下一步
 
-**Phase 5.2：MCP 工具注册表**
+**Phase 5.3：RAG 工具化**
 
-将 4 个 MCP Server（github-mcp、filesystem-mcp、osv-mcp、code-analysis-mcp）的工具自动发现并注册为 LLM 可调用的 Tool。
+将 RAG 检索能力（`rag.query_knowledge`、`rag.get_benchmark`、`rag.get_competitors`）在应用启动时自动注册到 ToolRegistry。
 
 详见 [`PHASE5_PLAN.md`](./PHASE5_PLAN.md) 第 3 章。

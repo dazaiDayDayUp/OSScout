@@ -179,7 +179,7 @@ Specialist 之间通过 Message Bus 协作。初步分析完成后，Reflection 
 | 子阶段 | 核心目标 | 状态 | 涉及文件 |
 |--------|---------|------|---------|
 | **5.1** | Function Calling 基础设施 | ✅ 已完成 | 新增：`tool.py` `registry.py` `executor.py` `mcp_adapter.py` `rag_adapter.py`；修改：`schemas.py` `base.py` `providers.py` |
-| **5.2** | MCP 工具注册表 | ⏳ 待开始 | 修改：`mcp_adapter.py` `registry.py` |
+| **5.2** | MCP 工具注册表 | ✅ 已完成 | 新增：`mcp_registry.py`；修改：`mcp_adapter.py` `__init__.py` `main.py` |
 | **5.3** | RAG 工具化 | ⏳ 待开始 | 修改：`rag_adapter.py` `query.py` |
 | **5.4** | Plan-and-Execute | ⏳ 待开始 | 新增：`plan_engine.py` `execute_engine.py` `shared_memory.py` |
 | **5.5** | ReAct Loop 升级 | ⏳ 待开始 | 修改：`execute_engine.py` |
@@ -191,25 +191,32 @@ Specialist 之间通过 Message Bus 协作。初步分析完成后，Reflection 
 
 ## 7. 代码迁移路径
 
-### 7.1 已新增文件（5.1）
+### 7.1 已新增文件
 
 ```
 backend/app/agents/tools/
-  ├── tool.py              # Tool 数据模型 ✅
-  ├── registry.py          # ToolRegistry + @tool 装饰器 ✅
-  ├── executor.py          # ToolExecutor ✅
-  ├── mcp_adapter.py       # MCPAdapter ✅
-  └── rag_adapter.py       # RAGToolAdapter ✅
+  ├── tool.py              # Tool 数据模型 ✅ (5.1)
+  ├── registry.py          # ToolRegistry + @tool 装饰器 ✅ (5.1)
+  ├── executor.py          # ToolExecutor ✅ (5.1)
+  ├── mcp_adapter.py       # MCPAdapter ✅ (5.1)
+  ├── rag_adapter.py       # RAGToolAdapter ✅ (5.1)
+  └── mcp_registry.py      # MCP 批量注册入口 ✅ (5.2)
 ```
 
-### 7.2 已修改文件（5.1）
+### 7.2 已修改文件
 
 ```
+# 5.1
 backend/app/llm/schemas.py              # 新增 ToolCall、ToolResult、扩展 LLMMessage ✅
 backend/app/llm/base.py                 # chat() 新增 tools 参数 ✅
 backend/app/llm/providers.py            # 底层传入 tools + 解析 tool_calls ✅
 backend/app/agents/tools/benchmark_tool.py  # 添加 @tool 装饰器 ✅
 backend/app/mcp/client.py               # 新增 list_tools_detailed() ✅
+
+# 5.2
+backend/app/agents/tools/mcp_adapter.py # 修复 handler 生命周期：接收 client_class 而非实例 ✅
+backend/app/agents/tools/__init__.py    # 暴露 initialize_mcp_tools / get_mcp_tools_summary ✅
+backend/app/main.py                     # lifespan 中集成 MCP 工具自动注册 ✅
 ```
 
 ### 7.3 待废弃文件（5.6 执行）
