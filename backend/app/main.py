@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.agents.tools import initialize_mcp_tools
+from app.agents.tools import initialize_mcp_tools, initialize_rag_tools
 from app.api.v1 import api_router
 from app.core.database import init_db
 from app.core.logger import configure_logging, get_logger
@@ -41,6 +41,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         # MCP 工具注册失败不应阻止应用启动
         logger.warning("MCP 工具注册异常，应用继续启动", error=str(e))
+
+    # Phase 5.3: 注册 RAG 工具
+    # 失败隔离：向量库连接失败不影响应用启动
+    try:
+        rag_tools = await initialize_rag_tools()
+        logger.info(
+            "RAG 工具注册完成",
+            count=len(rag_tools),
+            tool_names=[t.name for t in rag_tools],
+        )
+    except Exception as e:
+        logger.warning("RAG 工具注册异常，应用继续启动", error=str(e))
 
     yield
     logger.info("应用关闭")

@@ -8,9 +8,9 @@ RAG Adapter
 - LLM 拿到内容后自主判断引用哪些段落支撑结论
 
 封装为 3 个 Tool：
-1. rag.query_knowledge: 通用语义检索知识库
-2. rag.get_benchmark: 查询行业基准数据（对接 benchmark_tool）
-3. rag.get_competitors: 检索竞品对比信息
+1. rag_query_knowledge: 通用语义检索知识库
+2. rag_get_benchmark: 查询行业基准数据（对接 benchmark_tool）
+3. rag_get_competitors: 检索竞品对比信息
 """
 import json
 
@@ -144,7 +144,7 @@ class RAGAdapter:
             )
 
         return Tool(
-            name="rag.query_knowledge",
+            name="rag_query_knowledge",
             description=(
                 "检索知识库获取权威资料。在分析过程中需要引用行业标准、"
                 "历史案例、评估方法论时调用。返回完整文档内容，"
@@ -222,7 +222,7 @@ class RAGAdapter:
             )
 
         return Tool(
-            name="rag.get_benchmark",
+            name="rag_get_benchmark",
             description=(
                 "查询某类项目的行业基准数据。在评估项目指标时需要"
                 "与同类项目做量化对比时调用。例如查询前端框架的平均 PR 合并率。"
@@ -275,7 +275,7 @@ class RAGAdapter:
             )
 
         return Tool(
-            name="rag.get_competitors",
+            name="rag_get_competitors",
             description=(
                 "检索某技术领域的竞品对比信息。在评估项目竞争力和"
                 "市场定位时调用。"
@@ -297,3 +297,44 @@ class RAGAdapter:
             source=ToolSource.RAG,
             metadata={"rag_tool_type": "competitor"},
         )
+
+
+# ---------------------------------------------------------------------------
+# 统一初始化入口
+# ---------------------------------------------------------------------------
+
+
+async def initialize_rag_tools(
+    registry: ToolRegistry | None = None,
+) -> list[Tool]:
+    """初始化并注册所有 RAG Tool
+
+    在应用启动时调用，将 RAG 检索能力封装为 LLM 可调用的 Tool
+    并注册到全局 Registry。
+
+    失败隔离：向量库连接失败时记录警告，不阻止应用启动。
+
+    Args:
+        registry: 目标注册表，默认使用全局单例
+
+    Returns:
+        注册成功的 Tool 列表
+    """
+    target_registry = registry or get_registry()
+
+    try:
+        adapter = RAGAdapter(registry=target_registry)
+        tools = adapter.register_tools()
+        logger.info(
+            "RAG 工具注册完成",
+            count=len(tools),
+            tool_names=[t.name for t in tools],
+        )
+        return tools
+    except Exception as e:
+        logger.warning(
+            "RAG 工具注册失败，应用继续启动",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return []
