@@ -107,6 +107,29 @@ class _BaseMCPClient:
                 pass
             self._session = None
 
+    async def list_tools_detailed(self) -> list[dict]:
+        """获取 Server 暴露的所有工具的详细信息
+
+        返回列表中每个元素包含：
+            - name: 工具名称
+            - description: 工具描述
+            - inputSchema: 参数 JSON Schema
+        """
+        if not self._session:
+            raise RuntimeError("Client 未连接，请先使用 async with 进入上下文")
+
+        async with self._call_lock:
+            result = await self._session.list_tools()
+
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description or "",
+                "inputSchema": tool.inputSchema or {"type": "object"},
+            }
+            for tool in result.tools
+        ]
+
     async def list_tools(self) -> list[str]:
         """获取 Server 暴露的所有工具名称"""
         if not self._session:

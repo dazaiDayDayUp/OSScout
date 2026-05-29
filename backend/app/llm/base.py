@@ -39,6 +39,7 @@ class LLMProvider(ABC):
         messages: list[LLMMessage],
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[dict] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -48,10 +49,11 @@ class LLMProvider(ABC):
             messages: 对话历史消息列表
             temperature: 采样温度，0~2，越低越确定
             max_tokens: 最大生成 token 数，None 表示不限制
+            tools: 工具定义列表（Function Calling），每个元素是 OpenAI 格式的 tool schema
             **kwargs: 额外参数（如 top_p、presence_penalty 等）
 
         Returns:
-            LLMResponse: 统一格式的响应
+            LLMResponse: 统一格式的响应，若 LLM 决定调用工具则包含 tool_calls
         """
         ...
 
