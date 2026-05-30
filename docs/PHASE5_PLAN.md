@@ -274,7 +274,7 @@ Specialist 之间通过 Message Bus 协作。全部分析完成后，Reflection 
 | **5.1** | Function Calling 基础设施 | ✅ 已完成 | 新增：`tool.py` `registry.py` `executor.py` `mcp_adapter.py` `rag_adapter.py`；修改：`schemas.py` `base.py` `providers.py` |
 | **5.2** | MCP 工具注册表 | ✅ 已完成 | 新增：`mcp_registry.py`；修改：`mcp_adapter.py` `__init__.py` `main.py` |
 | **5.3** | RAG 工具化 | ✅ 已完成 | 修改：`rag_adapter.py` `query.py` `main.py` |
-| **5.4** | Plan-and-Execute 编排引擎 | ⏳ 当前重点 | 新增：`plan_engine.py` `execute_engine.py` `shared_memory.py`；修改：`main.py`（集成新编排入口） |
+| **5.4** | Plan-and-Execute 编排引擎 | ✅ 已完成 | 新增：`plan_engine.py` `execute_engine.py` `shared_memory.py`；修改：`providers.py`（Kimi temperature 修正） |
 | **5.5** | ReAct Loop 升级 | ⏳ 待开始 | 修改：`execute_engine.py` |
 | **5.6** | 动态分析流程（Master + Specialist） | ⏳ 待开始 | 新增：`specialists/` 目录；废弃旧 Agent 文件 |
 | **5.7** | Reflection | ⏳ 待开始 | 新增：`reflection_engine.py` `message_bus.py` |
@@ -310,12 +310,12 @@ Specialist 之间通过 Message Bus 协作。全部分析完成后，Reflection 
 
 | # | 验收项 | 判定标准 | 状态 |
 |---|--------|---------|------|
-| 1 | Plan Engine | LLM 能根据仓库地址制定合理的分析计划，输出 `Step` 列表 | ⏳ |
-| 2 | 声明式数据需求 | Plan 中 `needs` 是数据需求，不是 Tool 名 | ⏳ |
-| 3 | Shared Memory | 单次分析内，同一 Tool + 同一参数只执行一次 | ⏳ |
-| 4 | 依赖感知并行 | 能正确解析 `deps`，无依赖步骤自动并行 | ⏳ |
-| 5 | 失败隔离 | 单个 Tool 失败不阻断整体流程 | ⏳ |
-| 6 | Specialist 扩展点 | `Step` 预留 `step_type="specialist"`，Execute Engine 能识别路由 | ⏳ |
+| 1 | Plan Engine | LLM 能根据仓库地址制定合理的分析计划，输出 `Step` 列表 | ✅ |
+| 2 | 声明式数据需求 | Plan 中 `needs` 是数据需求，不是 Tool 名 | ✅ |
+| 3 | Shared Memory | 单次分析内，同一 Tool + 同一参数只执行一次 | ✅ |
+| 4 | 依赖感知并行 | 能正确解析 `deps`，无依赖步骤自动并行 | ✅ |
+| 5 | 失败隔离 | 单个 Tool 失败不阻断整体流程 | ✅ |
+| 6 | Specialist 扩展点 | `Step` 预留 `step_type="specialist"`，Execute Engine 能识别路由 | ✅ |
 
 ---
 
@@ -352,6 +352,15 @@ backend/app/main.py                     # lifespan 中集成 MCP 工具自动注
 backend/app/agents/tools/rag_adapter.py # 新增 initialize_rag_tools() 统一入口 ✅
 backend/app/agents/tools/__init__.py    # 暴露 initialize_rag_tools ✅
 backend/app/main.py                     # lifespan 中集成 RAG 工具自动注册 ✅
+
+# 5.4
+backend/app/agents/orchestration/
+  ├── __init__.py          # 导出三个核心类 ✅
+  ├── shared_memory.py     # 进程内缓存 ✅
+  ├── plan_engine.py       # Plan 制定引擎 ✅
+  └── execute_engine.py    # Plan 执行引擎 ✅
+backend/app/llm/providers.py            # Kimi k2.6 temperature 区分修正 ✅
+backend/scripts/verify_phase54.py       # 端到端验证脚本 ✅
 ```
 
 ### 7.3 待废弃文件（5.6 执行）
@@ -379,4 +388,4 @@ backend/app/agents/llm_enhancer.py       → 功能由 Tool 层替代
 
 ---
 
-*本文档为 Phase 5 的完整技术规划，随着开发进展持续更新。当前下一步：Phase 5.4（Plan-and-Execute 编排引擎）。*
+*本文档为 Phase 5 的完整技术规划，随着开发进展持续更新。当前下一步：Phase 5.5（ReAct Loop 升级）。*

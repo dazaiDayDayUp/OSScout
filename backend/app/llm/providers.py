@@ -203,18 +203,33 @@ class KimiProvider(_OpenAICompatibleProvider):
         """
         Kimi 特定模型的温度修正
 
-        kimi-k2.6 / kimi-k2.5 / kimi-k2-thinking 等思考模型
-        强制要求 temperature=1.0，传入其他值会报 400 错误。
-        这里自动修正并记录日志，避免业务代码需要关心这个限制。
+        kimi-k2.6 对 temperature 有严格限制，且根据 thinking 状态不同：
+        - thinking 启用（默认）→ temperature 必须为 1.0
+        - thinking 禁用（chat_structured 时）→ temperature 必须为 0.6
+        这里自动检测并修正，避免业务代码关心这个限制。
         """
-        # k2 系列思考模型强制 temperature=1.0（API 端最新限制）
-        if self.model.startswith("kimi-k2") and temperature != 1.0:
-            logger.debug(
-                "kimi 思考模型 temperature 自动修正为 1.0",
-                model=self.model,
-                requested_temperature=temperature,
+        if self.model.startswith("kimi-k2"):
+            # 检测 thinking 是否被禁用（chat_structured 会设置）
+            extra_body = kwargs.get("extra_body", {})
+            thinking_disabled = (
+                isinstance(extra_body, dict)
+                and extra_body.get("thinking", {}).get("type") == "disabled"
             )
-            temperature = 1.0
+
+            if thinking_disabled and temperature != 0.6:
+                logger.debug(
+                    "kimi k2 thinking 禁用模式 temperature 自动修正为 0.6",
+                    model=self.model,
+                    requested_temperature=temperature,
+                )
+                temperature = 0.6
+            elif not thinking_disabled and temperature != 1.0:
+                logger.debug(
+                    "kimi k2 thinking 启用模式 temperature 自动修正为 1.0",
+                    model=self.model,
+                    requested_temperature=temperature,
+                )
+                temperature = 1.0
 
         return await super().chat(
             messages=messages,

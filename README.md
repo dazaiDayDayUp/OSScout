@@ -2,9 +2,9 @@
 
 > 面向技术团队的开源项目自动化尽调平台
 
-输入一个 GitHub 仓库地址，LLM 自主规划分析路径、自主调用工具采集数据、自主检索权威知识库做基准对比，最终输出一份覆盖社区健康、代码质量、安全风险、技术演进四个维度的结构化尽调报告。
+输入一个 GitHub 仓库地址，LLM 自主规划分析路径、自动调用工具采集数据、检索权威知识库做基准对比，最终输出一份覆盖社区健康、代码质量、安全风险、技术演进四个维度的结构化尽调报告。
 
-**核心差异化**：规则评分打底 + **LLM 自主规划与工具调用** + **生产级 RAG 知识库** + 综合报告生成 + **分析完成邮件推送**。
+**核心差异化**：规则评分打底 + **LLM 自主规划** + **生产级 RAG 知识库** + 综合报告生成 + **分析完成邮件推送**。
 
 ---
 
@@ -51,7 +51,7 @@ API 文档：`http://localhost:8000/docs`
 
 - **后端**：Python 3.12 + FastAPI + SQLAlchemy(async) + PostgreSQL 16 + Redis 7
 - **任务队列**：Celery + Redis Broker
-- **Agent 编排**：手写 Plan-and-Execute + ReAct Loop（不用 LangChain）
+- **Agent 编排**：手写 Plan-and-Execute（5.4）+ ReAct Loop（5.5）（不用 LangChain）
 - **MCP 协议**：官方 Python SDK
 - **LLM**：Kimi (`kimi-k2.6`) + DeepSeek (`deepseek-v4-pro`)
 - **RAG**：ChromaDB + sentence-transformers + BM25 + Cross-Encoder Rerank + Self-RAG

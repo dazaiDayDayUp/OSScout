@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-**Phase 0~4 全部完成，Phase 5.1~5.3 已完成。当前重点：Phase 5.4（Plan-and-Execute 编排引擎）。**
+**Phase 0~4 全部完成，Phase 5.1~5.4 已完成。当前重点：Phase 5.5（ReAct Loop 升级）。**
 
-最近更新：2026-05-29
+最近更新：2026-05-30
 
 ---
 
@@ -19,8 +19,8 @@
 | 5.1 | Function Calling 基础设施 | ✅ 已完成 |
 | 5.2 | MCP 工具注册表 | ✅ 已完成 |
 | 5.3 | RAG 工具化 | ✅ 已完成 |
-| **5.4** | **Plan-and-Execute 编排引擎** | **⏳ 当前重点** |
-| 5.5 | ReAct Loop 升级 | ⏳ 待开始 |
+| 5.4 | Plan-and-Execute 编排引擎 | ✅ 已完成 |
+| **5.5** | **ReAct Loop 升级** | **⏳ 当前重点** |
 | 5.6 | 动态分析流程（Master + Specialist） | ⏳ 待开始 |
 | 5.7 | Reflection + Message Bus | ⏳ 待开始 |
 | 5.8 | 前端适配 | ⏳ 待开始 |
@@ -31,8 +31,14 @@
 
 ## 下一步
 
-**Phase 5.4：Plan-and-Execute 编排引擎**
+**Phase 5.5：ReAct Loop 升级**
 
-新增 `plan_engine.py`、`execute_engine.py`、`shared_memory.py`，实现 LLM 自主规划分析路径 + 代码层自动并行化无依赖步骤。
+当前 5.4 是"静态 Plan + 代码层执行"——LLM 只在最开始做一次计划，后续 Tool 调用由代码层的 needs→Tool 映射决定。5.5 要让 LLM 真正参与执行过程中的决策：
 
-详见 [`PHASE5_PLAN.md` 第 4 章](../PHASE5_PLAN.md)。
+1. **每轮循环**：LLM 看到当前已采集的数据 → 自主决定下一步调什么 Tool（通过 Function Calling）
+2. **动态补充**：LLM 发现数据不够 → 自主输出 tool_calls 采集补充数据
+3. **终止判断**：LLM 认为分析充分 → 停止循环，输出最终结论
+
+核心改动在 `ExecuteEngine`：从"按静态 Plan 执行"升级为"LLM 驱动的 ReAct 循环"。
+
+详见 [`PHASE5_PLAN.md` 第 4.6 节](../PHASE5_PLAN.md)。
