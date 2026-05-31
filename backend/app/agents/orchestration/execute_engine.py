@@ -1,7 +1,7 @@
 """
 Execute Engine — 计划执行引擎
 
-Phase 5.4 核心组件之一。
+Phase 5.4 + 5.5 核心组件。
 
 职责：解析 Plan → 提取当前可执行步骤 → 映射到 Tool → 查缓存 → 执行 → 存结果。
 
@@ -10,6 +10,7 @@ Phase 5.4 核心组件之一。
 - 数据只采一次：SharedMemory 缓存，同一 Tool + 参数永远只执行一次
 - 声明式数据需求：Plan 中的 needs 是抽象数据需求，Execute Engine 负责映射到 Tool
 - 失败隔离：单个 Tool 失败只影响当前步骤，不阻断整体流程
+- ReAct Loop（5.5）：每轮 DAG 执行后，LLM 通过 Function Calling 自主决定下一步行动
 - Specialist 预留：识别 step_type="specialist" 但不执行（Phase 5.6 实现）
 
 使用方式：
@@ -21,7 +22,7 @@ Phase 5.4 核心组件之一。
     plan_engine = PlanEngine()
     plan = await plan_engine.create_plan(repo_url, llm)
 
-    # 执行计划
+    # 执行计划（启用 ReAct）
     execute_engine = ExecuteEngine(
         registry=get_registry(),
         executor=ToolExecutor(),
@@ -42,7 +43,7 @@ from app.agents.tools.registry import ToolRegistry, get_registry
 from app.agents.tools.tool import Tool, ToolSource
 from app.core.logger import get_logger
 from app.llm.base import LLMProvider
-from app.llm.schemas import LLMMessage
+from app.llm.schemas import LLMMessage, ToolCall
 
 from .plan_engine import AnalysisPlan, PlanStep
 from .shared_memory import SharedMemory
@@ -137,14 +138,18 @@ class ExecuteEngine:
         llm: LLMProvider | None = None,
         shared_memory: SharedMemory | None = None,
         needs_tool_map: dict[str, list[str]] | None = None,
+        react_enabled: bool = True,
+        react_max_iterations: int = 5,
     ) -> None:
         """
         Args:
             registry: ToolRegistry，默认全局单例
             executor: ToolExecutor，默认新建
-            llm: LLMProvider，用于 reasoning 步骤
+            llm: LLMProvider，用于 reasoning 步骤和 ReAct 决策
             shared_memory: SharedMemory，默认新建
             needs_tool_map: 自定义 needs → Tool 映射，覆盖默认映射
+            react_enabled: 是否启用 ReAct Loop（5.5），默认 True
+            react_max_iterations: ReAct 最大轮数，防止无限循环
         """
         self.registry = registry or get_registry()
         self.executor = executor or ToolExecutor(registry=self.registry)
@@ -157,6 +162,10 @@ class ExecuteEngine:
         # 执行期间的临时状态：tool_call_id → {tool_name, args} 映射
         self._pending_calls: dict[str, dict] = {}
 
+        # Phase 5.5: ReAct Loop 配置
+        self.react_enabled = react_enabled
+        self.react_max_iterations = react_max_iterations
+
     # ------------------------------------------------------------------
     # 公共接口
     # ------------------------------------------------------------------
@@ -165,6 +174,9 @@ class ExecuteEngine:
         """执行分析计划
 
         按 DAG 依赖顺序执行所有步骤，无依赖步骤自动并行。
+        Phase 5.5 新增：每轮 DAG 执行后插入 ReAct 决策点，
+        LLM 通过 Function Calling 自主决定是否需要补充数据或终止分析。
+
         所有 Tool 执行结果和 Reasoning 结果存入 SharedMemory。
 
         Args:
@@ -180,40 +192,55 @@ class ExecuteEngine:
         failed: set[str] = set()
         iteration = 0
         max_iterations = len(plan.steps) * 2  # 安全上限，防止死循环
+        react_iteration = 0  # ReAct 轮数计数器
 
         logger.info(
             "ExecuteEngine: 开始执行计划",
             total_steps=len(plan.steps),
             context_keys=list(context.keys()),
+            react_enabled=self.react_enabled,
         )
 
         while iteration < max_iterations:
             iteration += 1
 
-            # 找出所有依赖已满足的步骤
+            # --------------------------------------------------------------
+            # A. DAG 静态执行（Phase 5.4 逻辑，完全复用）
+            # --------------------------------------------------------------
             ready_steps = self._get_ready_steps(plan, completed, failed)
 
             if not ready_steps:
                 total_done = len(completed) + len(failed)
                 if total_done >= len(plan.steps):
                     # 全部完成或失败
-                    break
-                # 有步骤永远不满足（死锁）
-                remaining = [
-                    s.step_id
-                    for s in plan.steps
-                    if s.step_id not in completed and s.step_id not in failed
-                ]
-                raise ValueError(
-                    f"ExecuteEngine 死锁：以下步骤的依赖永远无法满足: {remaining}"
-                )
+                    # Phase 5.5: 如果 ReAct 已启用且还有迭代空间，
+                    # 给 ReAct 一次补充数据的机会，不立即终止
+                    if (
+                        self.react_enabled
+                        and self.llm is not None
+                        and react_iteration < self.react_max_iterations
+                    ):
+                        pass  # 继续执行到下方的 ReAct 决策点
+                    else:
+                        break
+                else:
+                    # 有步骤永远不满足（死锁）
+                    remaining = [
+                        s.step_id
+                        for s in plan.steps
+                        if s.step_id not in completed and s.step_id not in failed
+                    ]
+                    raise ValueError(
+                        f"ExecuteEngine 死锁：以下步骤的依赖永远无法满足: {remaining}"
+                    )
 
-            logger.info(
-                "ExecuteEngine execution round",
-                iteration=iteration,
-                ready_steps=len(ready_steps),
-                step_ids=[s.step_id for s in ready_steps],
-            )
+            if ready_steps:
+                logger.info(
+                    "ExecuteEngine execution round",
+                    iteration=iteration,
+                    ready_steps=len(ready_steps),
+                    step_ids=[s.step_id for s in ready_steps],
+                )
 
             # 并行执行所有就绪步骤
             # return_exceptions=True 实现失败隔离：单个步骤失败不取消其他步骤
@@ -236,6 +263,38 @@ class ExecuteEngine:
                 else:
                     completed.add(step.step_id)
 
+            # --------------------------------------------------------------
+            # B. ReAct 决策点（Phase 5.5 新增）
+            # --------------------------------------------------------------
+            if self.react_enabled and self.llm is not None:
+                react_iteration += 1
+                react_action = await self._execute_react_round(
+                    plan=plan,
+                    completed=completed,
+                    failed=failed,
+                    react_iteration=react_iteration,
+                )
+                if react_action == "break":
+                    break
+                elif react_action == "continue":
+                    continue
+                # else "pass": 继续执行下方的终止检查
+
+            # --------------------------------------------------------------
+            # C. 终止检查（Phase 5.4 逻辑 + 5.5 ReAct 兼容）
+            # --------------------------------------------------------------
+            total_done = len(completed) + len(failed)
+            if total_done >= len(plan.steps):
+                # Phase 5.5: ReAct 还有迭代空间时，给 LLM 一次补充数据的机会
+                if (
+                    self.react_enabled
+                    and self.llm is not None
+                    and react_iteration < self.react_max_iterations
+                ):
+                    pass  # 不终止，继续循环，让 ReAct 有机会补充
+                else:
+                    break
+
         # 执行完成，输出摘要
         summary = {
             "completed": len(completed),
@@ -244,6 +303,8 @@ class ExecuteEngine:
             "completed_ids": sorted(completed),
             "failed_ids": sorted(failed),
             "iterations": iteration,
+            "react_iterations": react_iteration,
+            "react_enabled": self.react_enabled,
             "memory_summary": self.memory.summary(),
         }
         logger.info(
@@ -251,9 +312,8 @@ class ExecuteEngine:
             completed=len(completed),
             failed=len(failed),
             total=len(plan.steps),
-            completed_ids=sorted(completed),
-            failed_ids=sorted(failed),
-            iterations=iteration,
+            react_iterations=react_iteration,
+            react_enabled=self.react_enabled,
             memory_summary=self.memory.summary(),
         )
 
@@ -752,6 +812,296 @@ class ExecuteEngine:
 请直接输出分析结论。"""
 
     # ------------------------------------------------------------------
+    # ReAct Loop（Phase 5.5 新增）
+    # ------------------------------------------------------------------
+    # ReAct（Reasoning + Acting）Loop 让 LLM 在执行过程中参与决策。
+    # 每轮 DAG 执行后，调用 LLM 观察当前状态，通过 Function Calling
+    # 自主决定：补充采集数据 / 继续执行 / 终止分析。
+
+    async def _execute_react_round(
+        self,
+        plan: AnalysisPlan,
+        completed: set[str],
+        failed: set[str],
+        react_iteration: int,
+    ) -> str:
+        """执行一轮 ReAct 决策
+
+        封装 ReAct 的最大轮数检查、LLM 调用和结果解析。
+
+        Args:
+            plan: 分析计划
+            completed: 已完成的步骤 ID 集合
+            failed: 失败的步骤 ID 集合
+            react_iteration: 当前 ReAct 轮数
+
+        Returns:
+            "break"     — 终止循环（达到上限或 LLM 决定终止）
+            "continue"  — 跳过本轮剩余逻辑，进入下一轮（LLM 调用了 Tool）
+            "pass"      — 继续执行后续逻辑（LLM 决定继续）
+        """
+        if react_iteration > self.react_max_iterations:
+            logger.info(
+                "ReAct 达到最大轮数限制，停止补充",
+                max_iterations=self.react_max_iterations,
+            )
+            return "break"
+
+        react_result = await self._react_decision_point(plan, completed, failed)
+
+        if react_result == "terminate":
+            logger.info("ReAct: LLM 决定终止分析")
+            return "break"
+        elif react_result == "tool_calls":
+            # Tool 已在 _react_decision_point 中执行
+            return "continue"
+
+        return "pass"
+
+    def _record_react_decision(
+        self,
+        turn: int,
+        action: str,
+        **kwargs,
+    ) -> None:
+        """记录 ReAct 决策历史到 SharedMemory
+
+        消除 _react_decision_point 中重复的记录逻辑。
+
+        Args:
+            turn: ReAct 轮次序号
+            action: 决策动作（continue / tool_calls / terminate / error）
+            **kwargs: 额外字段（content / model / tool_names / error 等）
+        """
+        react_history = self.memory.get("__react_history__") or []
+        react_history.append({"turn": turn, "action": action, **kwargs})
+        self.memory.set("__react_history__", react_history)
+
+    async def _react_decision_point(
+        self,
+        plan: AnalysisPlan,
+        completed: set[str],
+        failed: set[str],
+    ) -> str:
+        """ReAct 决策点：调用 LLM 决定下一步行动
+
+        向 LLM 展示当前分析状态（已完成的步骤、已采集的数据、就绪的步骤），
+        让 LLM 通过 Function Calling 自主决定下一步。
+
+        Args:
+            plan: 分析计划
+            completed: 已完成的步骤 ID 集合
+            failed: 失败的步骤 ID 集合
+
+        Returns:
+            "continue"    — LLM 认为应继续执行 Plan 中剩余步骤
+            "tool_calls"  — LLM 输出 tool_calls，已执行补充 Tool 调用
+            "terminate"   — LLM 认为分析已完成，终止循环
+        """
+        # 0. 确定当前轮次
+        react_history = self.memory.get("__react_history__") or []
+        turn = len(react_history) + 1
+
+        # 1. 构建 ReAct Prompt
+        prompt = self._build_react_prompt(plan, completed, failed)
+
+        # 2. 获取所有可用 Tool 的 schema（供 LLM Function Calling 使用）
+        all_schemas = self.registry.to_openai_schemas()
+
+        # 3. 调用 LLM（真正的 Function Calling）
+        messages = [
+            LLMMessage(role="system", content=prompt),
+        ]
+
+        try:
+            response = await self.llm.chat(
+                messages=messages,
+                tools=all_schemas,
+                temperature=0.3,
+            )
+        except Exception as e:
+            logger.error("ReAct LLM 调用失败，保守回退到 continue", error=str(e))
+            self._record_react_decision(turn, "error", error=str(e))
+            return "continue"
+
+        # 4. 处理 LLM 响应
+        if response.tool_calls:
+            # LLM 决定调用补充 Tool
+            logger.info(
+                "ReAct: LLM 输出 tool_calls",
+                tool_names=[tc.name for tc in response.tool_calls],
+                tool_count=len(response.tool_calls),
+            )
+            self._record_react_decision(
+                turn, "tool_calls",
+                tool_names=[tc.name for tc in response.tool_calls],
+                content=response.content,
+                model=response.model,
+            )
+            await self._execute_react_tools(response.tool_calls)
+            return "tool_calls"
+
+        # 5. 无 tool_calls，解析文本判断终止 / 继续
+        content = (response.content or "").strip().upper()
+        if content.startswith("TERMINATE") or "分析完成" in response.content:
+            # LLM 决定终止分析
+            self.memory.set("__react_termination__", {
+                "reasoning": response.content,
+                "model": response.model,
+                "provider": response.provider,
+            })
+            self._record_react_decision(
+                turn, "terminate",
+                content=response.content,
+                model=response.model,
+            )
+            logger.info(
+                "ReAct: LLM 决定终止分析",
+                reasoning=response.content[:200],
+            )
+            return "terminate"
+
+        # 默认继续
+        logger.debug("ReAct: LLM 决定继续执行")
+        self._record_react_decision(
+            turn, "continue",
+            content=response.content,
+            model=response.model,
+        )
+        return "continue"
+
+    async def _execute_react_tools(self, tool_calls: list[ToolCall]) -> None:
+        """执行 ReAct 决策中的补充 Tool 调用
+
+        完全复用 ToolExecutor，结果存入 SharedMemory，
+        与常规 DAG 执行共享缓存（数据只采一次）。
+
+        Args:
+            tool_calls: LLM 输出的 ToolCall 列表
+        """
+        if not tool_calls:
+            return
+
+        # ToolCall 对象转 dict（ToolExecutor 期望的格式）
+        tc_dicts = [
+            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+            for tc in tool_calls
+        ]
+
+        # 复用 execute_all 并行执行
+        results = await self.executor.execute_all(tc_dicts)
+
+        # 结果存入 SharedMemory（与常规执行共享缓存）
+        for result in results:
+            tc = next(
+                (t for t in tc_dicts if t["id"] == result.tool_call_id), None
+            )
+            if tc and not result.is_error:
+                args = json.loads(tc.get("arguments", "{}"))
+                self.memory.set_tool_result(
+                    tool_name=result.tool_name,
+                    args=args,
+                    result=result.output,
+                    needs=["react_supplemental"],
+                )
+                logger.debug(
+                    "ReAct Tool 结果已缓存",
+                    tool_name=result.tool_name,
+                )
+            elif result.is_error:
+                logger.warning(
+                    "ReAct Tool 执行失败",
+                    tool_name=result.tool_name,
+                    error=result.error_message,
+                )
+
+    def _build_react_prompt(
+        self,
+        plan: AnalysisPlan,
+        completed: set[str],
+        failed: set[str],
+    ) -> str:
+        """构建 ReAct 决策 Prompt
+
+        向 LLM 展示当前分析状态，让其自主决定下一步行动。
+
+        Args:
+            plan: 分析计划
+            completed: 已完成的步骤 ID 集合
+            failed: 失败的步骤 ID 集合
+
+        Returns:
+            Prompt 字符串
+        """
+        # 各步骤状态摘要
+        step_status = []
+        for step in plan.steps:
+            if step.step_id in completed:
+                status = "已完成"
+            elif step.step_id in failed:
+                status = "已失败"
+            else:
+                status = "未执行"
+            step_status.append(
+                f"- {step.step_id} ({step.step_type}): {step.description} [{status}]"
+            )
+
+        # 已采集的数据摘要（避免 Prompt 过长，只列出工具名）
+        all_data = self.memory.get_all()
+        data_summary = []
+        for key in sorted(all_data.keys()):
+            if key.startswith("tool:"):
+                parts = key.split(":", 2)
+                if len(parts) >= 2:
+                    data_summary.append(f"  - {parts[1]}: 已采集")
+            elif key.startswith("reasoning:"):
+                data_summary.append(f"  - {key}: 已完成")
+
+        # 就绪但未执行的步骤
+        ready = self._get_ready_steps(plan, completed, failed)
+        ready_list = [f"  - {s.step_id}: {s.description}" for s in ready]
+
+        # 可用工具列表摘要（避免 Prompt 过长，只列前 20 个）
+        available_tools = []
+        for tool in self.registry.list_tools()[:20]:
+            available_tools.append(
+                f"  - {tool.name}: {tool.description[:60]}..."
+            )
+
+        return f"""你是一名开源项目尽调分析的执行协调者。当前分析正在进行中，请你根据已采集的数据和计划执行状态，决定下一步行动。
+
+【分析目标】
+对 GitHub 仓库进行全面的开源项目尽调分析，覆盖社区健康、代码质量、安全风险、技术演进四个维度。
+
+【计划执行状态】
+总步骤数: {len(plan.steps)}
+已完成: {len(completed)} 个
+已失败: {len(failed)} 个
+
+各步骤状态:
+{"\n".join(step_status)}
+
+【就绪但未执行的步骤】
+{"\n".join(ready_list) if ready_list else "（无）"}
+
+【已采集的数据摘要】
+{"\n".join(data_summary) if data_summary else "（暂无数据）"}
+
+【可用工具列表（部分）】
+{"\n".join(available_tools)}
+
+【你的决策规则】
+1. 如果你发现某些关键数据缺失，需要额外采集 → 调用相应的工具（Function Calling）
+2. 如果你认为已采集的数据足够支撑完整分析，不需要继续 → 回复 TERMINATE: 你的结论摘要
+3. 如果你认为应该继续按 Plan 执行剩余步骤 → 回复 CONTINUE
+
+重要提示：
+- 工具调用和文本回复二选一，不要同时进行
+- 如果调用工具，请一次性列出所有需要补充采集的工具调用
+- 如果回复 TERMINATE，请提供简要的分析结论
+- 如果回复 CONTINUE，不需要额外解释"""
+
+    # ------------------------------------------------------------------
     # DAG 依赖解析
     # ------------------------------------------------------------------
 
@@ -768,7 +1118,7 @@ class ExecuteEngine:
         2. 所有依赖步骤都已完成（在 completed 中）
 
         注意：依赖失败的步骤不会被标记为就绪（保守策略）。
-        Phase 5.5 的 ReAct 可以放宽此限制。
+        如需在依赖失败时走替代路径，由 Phase 5.6 的 Specialist 机制处理。
 
         Args:
             plan: 分析计划

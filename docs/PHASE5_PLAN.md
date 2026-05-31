@@ -275,8 +275,8 @@ Specialist 之间通过 Message Bus 协作。全部分析完成后，Reflection 
 | **5.2** | MCP 工具注册表 | ✅ 已完成 | 新增：`mcp_registry.py`；修改：`mcp_adapter.py` `__init__.py` `main.py` |
 | **5.3** | RAG 工具化 | ✅ 已完成 | 修改：`rag_adapter.py` `query.py` `main.py` |
 | **5.4** | Plan-and-Execute 编排引擎 | ✅ 已完成 | 新增：`plan_engine.py` `execute_engine.py` `shared_memory.py`；修改：`providers.py`（Kimi temperature 修正） |
-| **5.5** | ReAct Loop 升级 | ⏳ 待开始 | 修改：`execute_engine.py` |
-| **5.6** | 动态分析流程（Master + Specialist） | ⏳ 待开始 | 新增：`specialists/` 目录；废弃旧 Agent 文件 |
+| **5.5** | ReAct Loop 升级 | ✅ 已完成 | 修改：`execute_engine.py` |
+| **5.6** | 动态分析流程（Master + Specialist） | ⏳ 当前重点 | 新增：`specialists/` 目录；废弃旧 Agent 文件 |
 | **5.7** | Reflection | ⏳ 待开始 | 新增：`reflection_engine.py` `message_bus.py` |
 | **5.8** | 前端适配 | ⏳ 待开始 | 修改：前端报告详情页 |
 
@@ -316,6 +316,29 @@ Specialist 之间通过 Message Bus 协作。全部分析完成后，Reflection 
 | 4 | 依赖感知并行 | 能正确解析 `deps`，无依赖步骤自动并行 | ✅ |
 | 5 | 失败隔离 | 单个 Tool 失败不阻断整体流程 | ✅ |
 | 6 | Specialist 扩展点 | `Step` 预留 `step_type="specialist"`，Execute Engine 能识别路由 | ✅ |
+
+#### 5.5 ReAct Loop 升级
+
+| # | 验收项 | 判定标准 | 状态 |
+|---|--------|---------|------|
+| 1 | ReAct 触发 | Plan 执行过程中 LLM 被调用做决策 | ✅ |
+| 2 | Tool 补充 | LLM 输出 tool_calls 采集不在原 Plan 中的数据 | ✅ |
+| 3 | 结果共享 | ReAct 调用的 Tool 结果进入 SharedMemory，可被后续步骤使用 | ✅ |
+| 4 | 终止判断 | LLM 可以主动决定终止分析 | ✅ |
+| 5 | 失败隔离 | ReAct 中 Tool 失败不影响循环继续 | ✅ |
+| 6 | 兼容 5.4 | 关闭 `react_enabled` 时行为与 5.4 完全一致 | ✅ |
+| 7 | 真实 LLM 验证 | Kimi / DeepSeek 各跑通至少 3 次，TERMINATE/CONTINUE/tool_calls 均验证 | ✅ |
+
+**验证脚本**：
+- `backend/scripts/verify_phase55.py` — Mock 端到端验证（6/6 通过）
+- `backend/scripts/verify_phase55_real_llm.py` — 真实 LLM 验证（Kimi + DeepSeek 多次跑通）
+
+**已知问题**（详见 `PROGRESS.md`）：
+1. ReAct Prompt 不够 robust：LLM 识别数据不足时有时选择 TERMINATE + 文本说明，而非 tool_calls 补充
+2. Kimi k2.6 thinking 模式 + ReAct 效率极低（单次响应超过 20 分钟）
+3. Windows 终端 Unicode 编码问题
+4. ReAct 触发频率偏高（Mock 场景下易达到 `react_max_iterations` 上限）
+5. ReAct 在当前项目中价值定位待明确（Plan 已覆盖主要场景，ReAct 是"锦上添花"）
 
 ---
 
@@ -361,6 +384,16 @@ backend/app/agents/orchestration/
   └── execute_engine.py    # Plan 执行引擎 ✅
 backend/app/llm/providers.py            # Kimi k2.6 temperature 区分修正 ✅
 backend/scripts/verify_phase54.py       # 端到端验证脚本 ✅
+
+# 5.5
+backend/app/agents/orchestration/execute_engine.py  # 核心修改：新增 ReAct 决策点 ✅
+  # - __init__(): 新增 react_enabled / react_max_iterations 参数
+  # - run(): 插入 ReAct 决策点，终止检查兼容 ReAct
+  # - _react_decision_point(): ReAct 决策逻辑（Function Calling）
+  # - _execute_react_tools(): 执行补充 Tool，结果存入 SharedMemory
+  # - _build_react_prompt(): 构建 ReAct 决策 Prompt
+backend/scripts/verify_phase55.py        # Mock 端到端验证脚本 ✅
+backend/scripts/verify_phase55_real_llm.py  # 真实 LLM 验证脚本 ✅
 ```
 
 ### 7.3 待废弃文件（5.6 执行）
